@@ -4,49 +4,58 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
+/* ================================================================
+   „Klar" — ruhig, ein Akzent, keine Effekte (kein Glow, keine
+   Gradients, kein Blur, keine Muster). Beide Themes, Standard dunkel.
+   ================================================================ */
+
 @layer base {
   :root {
-    --bg-primary: #f8fafc;
+    /* Klar — Hell */
+    --bg-primary: #f6f6f7;
     --bg-card: #ffffff;
-    --bg-hover: #f1f5f9;
+    --bg-hover: #f1f1f3;
     --bg-input: #ffffff;
-    --border: #e2e8f0;
-    --text-primary: #0f172a;
-    --text-secondary: #475569;
-    --text-muted: #94a3b8;
+    --border: #e6e6ea;
+    --text-primary: #18181b;
+    --text-secondary: #52525b;
+    --text-muted: #8b8b94;
     --accent: #059669;
-    --accent-dim: #05966914;
-    --accent-hover: #047857;
-    --accent-border: #05966940;
-    --cyan: #34d399;
-    --glow-accent: rgba(5, 150, 105, 0.18);
-    --glow-cyan: rgba(52, 211, 153, 0.14);
-    --grid-opacity: 0.035;
-    --mesh-a: rgba(5, 150, 105, 0.08);
-    --mesh-b: rgba(52, 211, 153, 0.06);
-    --glass-blur: 14px;
+    --accent-fg: #ffffff;
+    --accent-soft: rgba(5, 150, 105, 0.09);
+    --accent-line: rgba(5, 150, 105, 0.28);
+    --accent-text: #047857;
+    --red: #dc2626;
+    --red-soft: rgba(220, 38, 38, 0.07);
+    --red-line: rgba(220, 38, 38, 0.28);
+    --amber: #b45309;
+    --amber-soft: rgba(180, 83, 9, 0.08);
+    --amber-line: rgba(180, 83, 9, 0.30);
+    --shadow: 0 12px 26px -20px rgba(24, 24, 27, 0.28);
   }
 
   .dark {
-    --bg-primary: #09090b;
-    --bg-card: #131316;
-    --bg-hover: #1b1b1f;
-    --bg-input: #101013;
-    --border: #27272a;
+    /* Klar — Dunkel (Standard) */
+    --bg-primary: #0b0b0e;
+    --bg-card: #121216;
+    --bg-hover: #18181d;
+    --bg-input: #0f0f13;
+    --border: #26262d;
     --text-primary: #fafafa;
-    --text-secondary: #a1a1aa;
-    --text-muted: #71717a;
-    --accent: #34d399;
-    --accent-dim: #34d3991c;
-    --accent-hover: #6ee7b7;
-    --accent-border: #34d39955;
-    --cyan: #6ee7b7;
-    --glow-accent: rgba(52, 211, 153, 0.25);
-    --glow-cyan: rgba(110, 231, 183, 0.16);
-    --grid-opacity: 0.04;
-    --mesh-a: rgba(52, 211, 153, 0.10);
-    --mesh-b: rgba(110, 231, 183, 0.07);
-    --glass-blur: 16px;
+    --text-secondary: #94949e;
+    --text-muted: #6e6e77;
+    --accent: #10b981;
+    --accent-fg: #052e1f;
+    --accent-soft: rgba(16, 185, 129, 0.12);
+    --accent-line: rgba(16, 185, 129, 0.30);
+    --accent-text: #34d399;
+    --red: #f87171;
+    --red-soft: rgba(248, 113, 113, 0.10);
+    --red-line: rgba(248, 113, 113, 0.32);
+    --amber: #fbbf24;
+    --amber-soft: rgba(251, 191, 36, 0.10);
+    --amber-line: rgba(251, 191, 36, 0.32);
+    --shadow: 0 14px 30px -22px rgba(0, 0, 0, 0.95);
   }
 
   body {
@@ -65,60 +74,51 @@
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
-    focus-ring-offset-color: var(--bg-primary);
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 focus:outline-none;
+  }
+  .btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
   .btn-primary {
     @apply btn font-semibold;
-    background: linear-gradient(135deg, var(--accent), var(--cyan));
-    color: #fff;
-    box-shadow: 0 8px 24px -8px var(--glow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    background-color: var(--accent);
+    color: var(--accent-fg);
   }
   .btn-primary:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.1);
-    box-shadow: 0 12px 32px -8px var(--glow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-  .btn-primary:active {
-    transform: translateY(0);
-  }
-  .btn-primary:focus {
-    ring-color: var(--accent);
+    filter: brightness(1.07);
   }
   .btn-primary:disabled {
     opacity: 0.45;
-    transform: none;
-    box-shadow: none;
     cursor: not-allowed;
   }
   .btn-secondary {
     @apply btn border font-semibold;
     border-color: var(--border);
     color: var(--text-primary);
-    background-color: var(--bg-card);
-    backdrop-filter: blur(var(--glass-blur));
+    background-color: transparent;
   }
   .btn-secondary:hover {
-    border-color: var(--accent-border);
-    box-shadow: 0 8px 24px -10px var(--glow-accent);
-    transform: translateY(-1px);
+    border-color: var(--accent-line);
+    background-color: var(--bg-hover);
   }
-  .btn-secondary:focus {
-    ring-color: var(--border);
+  .btn-danger {
+    @apply btn border font-semibold;
+    border-color: var(--red-line);
+    background-color: var(--red-soft);
+    color: var(--red);
+  }
+  .btn-danger:hover {
+    filter: brightness(1.06);
   }
   .card {
-    @apply rounded-2xl p-6;
+    @apply rounded-xl p-6;
     border: 1px solid var(--border);
     background-color: var(--bg-card);
-    backdrop-filter: blur(var(--glass-blur));
-    box-shadow: 0 20px 48px -24px rgba(0, 0, 0, 0.55);
-  }
-  .card-glow {
-    border-color: var(--accent-border);
-    box-shadow: 0 0 36px -10px var(--glow-accent), 0 24px 56px -24px rgba(0, 0, 0, 0.7);
+    box-shadow: var(--shadow);
   }
   .input {
-    @apply w-full rounded-xl px-4 py-2.5 text-sm transition-all font-mono;
+    @apply w-full rounded-lg px-4 py-2.5 text-sm transition-all font-mono;
     border: 1px solid var(--border);
     background-color: var(--bg-input);
     color: var(--text-primary);
@@ -129,7 +129,7 @@
   .input:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-dim), 0 0 20px var(--glow-accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
   .label {
     @apply block text-sm font-medium mb-1.5;
@@ -137,13 +137,13 @@
   }
   .kicker {
     @apply font-mono text-[11px] uppercase font-semibold;
-    letter-spacing: 0.22em;
-    color: var(--accent);
+    letter-spacing: 0.16em;
+    color: var(--text-muted);
   }
   .stat-num {
     font-family: 'Bricolage Grotesque', system-ui, sans-serif;
     font-weight: 700;
-    font-size: 2.1rem;
+    font-size: 1.55rem;
     line-height: 1.05;
     color: var(--text-primary);
   }
@@ -155,97 +155,38 @@
   }
   .badge-green {
     @apply badge;
-    background-color: rgba(16, 185, 129, 0.15);
-    color: #10b981;
-    border: 1px solid rgba(16, 185, 129, 0.35);
-    box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+    background-color: var(--accent-soft);
+    color: var(--accent-text);
+    border: 1px solid var(--accent-line);
   }
   .badge-red {
     @apply badge;
-    background-color: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
-    border: 1px solid rgba(239, 68, 68, 0.35);
-    box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+    background-color: var(--red-soft);
+    color: var(--red);
+    border: 1px solid var(--red-line);
   }
   .badge-yellow {
     @apply badge;
-    background-color: rgba(245, 158, 11, 0.15);
-    color: #f59e0b;
-    border: 1px solid rgba(245, 158, 11, 0.35);
-    box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
+    background-color: var(--amber-soft);
+    color: var(--amber);
+    border: 1px solid var(--amber-line);
   }
-  .term-bar {
-    @apply flex items-center gap-2 px-4 py-2.5 rounded-t-2xl border-b font-mono text-[11px];
-    border-color: var(--border);
-    background-color: var(--bg-primary);
-    color: var(--text-muted);
-  }
-  .term-dot {
-    @apply w-2.5 h-2.5 rounded-full inline-block;
-  }
-  .term-window {
-    @apply rounded-2xl overflow-hidden;
-    border: 1px solid var(--accent-border);
-    background-color: var(--bg-card);
-    backdrop-filter: blur(var(--glass-blur));
-    box-shadow: 0 0 48px -10px var(--glow-accent), 0 28px 70px -28px rgba(0, 0, 0, 0.85);
+  .badge-neutral {
+    @apply badge;
+    background-color: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
   }
   .pulse-dot {
     @apply w-2 h-2 rounded-full inline-block;
     background-color: var(--accent);
-    box-shadow: 0 0 10px var(--glow-accent);
     animation: pulse-dot 1.6s ease-in-out infinite;
   }
-  .fade-up {
-    opacity: 0;
-    animation: rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  }
-  .anim-d1 { animation-delay: 0.06s; }
-  .anim-d2 { animation-delay: 0.12s; }
-  .anim-d3 { animation-delay: 0.18s; }
-  .anim-d4 { animation-delay: 0.24s; }
-  .anim-d5 { animation-delay: 0.3s; }
-  .anim-d6 { animation-delay: 0.36s; }
   .skeleton {
     @apply rounded-lg;
     background: linear-gradient(100deg, var(--bg-hover) 30%, var(--border) 50%, var(--bg-hover) 70%);
     background-size: 200% 100%;
     animation: shimmer 1.4s linear infinite;
-  }
-}
-
-@layer utilities {
-  .bg-grid {
-    background-image:
-      linear-gradient(rgba(100, 116, 139, var(--grid-opacity)) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(100, 116, 139, var(--grid-opacity)) 1px, transparent 1px);
-    background-size: 40px 40px;
-  }
-  .hero-mesh {
-    background:
-      radial-gradient(640px 320px at 12% -4%, var(--mesh-a), transparent 70%),
-      radial-gradient(760px 360px at 88% 6%, var(--mesh-b), transparent 70%),
-      radial-gradient(560px 520px at 50% 112%, var(--mesh-a), transparent 70%);
-  }
-  .text-gradient {
-    background: linear-gradient(100deg, var(--accent) 5%, var(--cyan) 95%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-  .text-glow {
-    text-shadow: 0 0 28px var(--glow-accent);
-  }
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -267,55 +208,4 @@
   to {
     background-position: -200% 0;
   }
-}
-
-@keyframes blink-caret {
-  0%, 49% {
-    opacity: 1;
-  }
-  50%, 100% {
-    opacity: 0;
-  }
-}
-
-@keyframes scan-drift {
-  from {
-    background-position: 0 0;
-  }
-  to {
-    background-position: 0 120px;
-  }
-}
-
-/* ============ FLEET: eigene Welt (Smaragd Ops-Deck, immer dunkel) ============
-   Wrapper-Klasse auf der Fleet-Seite: überschreibt das Farb-System lokal.
-   Alle card/input/badge-Komponenten übernehmen die Palette automatisch. */
-.fleet-theme {
-  --bg-primary: #04080c;
-  --bg-card: #0a1216;
-  --bg-hover: #10202a;
-  --bg-input: #060d12;
-  --border: #1c3440;
-  --text-primary: #eaf6f3;
-  --text-secondary: #93b8ad;
-  --text-muted: #4a6a60;
-  --accent: #2dd4a7;
-  --accent-dim: #2dd4a71c;
-  --accent-hover: #5ce8bf;
-  --accent-border: #2dd4a744;
-  --cyan: #7cc7ff;
-  --glow-accent: rgba(45, 212, 167, 0.35);
-  --glow-cyan: rgba(124, 199, 255, 0.25);
-  --grid-opacity: 0.05;
-  --mesh-a: rgba(45, 212, 167, 0.10);
-  --mesh-b: rgba(124, 199, 255, 0.08);
-}
-
-.fleet-theme .font-display {
-  font-family: 'Bricolage Grotesque', 'DM Sans', system-ui, sans-serif;
-}
-
-.fleet-phosphor {
-  color: var(--accent);
-  text-shadow: 0 0 24px var(--glow-accent);
 }

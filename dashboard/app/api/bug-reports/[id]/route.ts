@@ -1,7 +1,7 @@
 import { badRequest, forbidden, notFound, ok, serverError, unauthorized } from "@/lib/response"
 import { getServiceClient } from "@/lib/supabase"
 import { requireSession } from "@/lib/auth"
-import { validatePathUuid, BugReportUpdateSchema } from "@/lib/validators"
+import { BugReportUpdateSchema } from "@/lib/validators"
 
 export const dynamic = "force-dynamic"
 
@@ -10,18 +10,17 @@ function parseId(raw: string): number | null {
   return Number.isInteger(id) && id > 0 ? id : null
 }
 
+// Bearbeiten/Löschen einer Meldung — nur der Owner (Admin-Dashboard).
 export async function PATCH(
   request: Request,
-  { params }: { params: { server_id: string; id: string } }
+  { params }: { params: { id: string } }
 ) {
-  if (!validatePathUuid(params.server_id)) return badRequest()
   const id = parseId(params.id)
   if (id === null) return badRequest()
 
   const session = requireSession(request)
   if (!session) return unauthorized()
-  if (session.server_id !== params.server_id) return unauthorized()
-  if (session.role !== "owner" && session.role !== "admin") return forbidden("Nur Owner/Admin können Meldungen bearbeiten")
+  if (session.role !== "owner") return forbidden("Nur der Owner kann Meldungen bearbeiten")
 
   let body: unknown
   try { body = await request.json() } catch { return badRequest() }
@@ -37,7 +36,6 @@ export async function PATCH(
       resolved_at: parsed.data.resolved ? new Date().toISOString() : null,
     })
     .eq("id", id)
-    .eq("server_id", params.server_id)
     .select("id")
 
   if (error) return serverError()
@@ -47,23 +45,20 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { server_id: string; id: string } }
+  { params }: { params: { id: string } }
 ) {
-  if (!validatePathUuid(params.server_id)) return badRequest()
   const id = parseId(params.id)
   if (id === null) return badRequest()
 
   const session = requireSession(request)
   if (!session) return unauthorized()
-  if (session.server_id !== params.server_id) return unauthorized()
-  if (session.role !== "owner" && session.role !== "admin") return forbidden("Nur Owner/Admin können Meldungen löschen")
+  if (session.role !== "owner") return forbidden("Nur der Owner kann Meldungen löschen")
 
   const sb = getServiceClient()
   const { data, error } = await (sb as any)
     .from("bug_reports")
     .delete()
     .eq("id", id)
-    .eq("server_id", params.server_id)
     .select("id")
 
   if (error) return serverError()

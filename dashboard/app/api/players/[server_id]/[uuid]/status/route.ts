@@ -16,8 +16,9 @@ export async function PATCH(
   const session = requireSession(request)
   if (!session) return unauthorized()
 
-  if (session.server_id !== params.server_id) return unauthorized()
   if (session.role !== "owner" && session.role !== "admin") return forbidden("Nur Owner/Admin können Status ändern")
+  // Der Owner darf serverübergreifend ändern (Admin-Dashboard); alle anderen nur ihren eigenen Server.
+  if (session.server_id !== params.server_id && session.role !== "owner") return unauthorized()
 
   let body: unknown
   try { body = await request.json() } catch { return badRequest() }

@@ -1,73 +1,90 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { logout } from "@/lib/client/auth"
+import { apiFetch, logout } from "@/lib/client/auth"
 import { useTheme } from "@/components/theme-provider"
 
-const navSections = [
-  {
-    title: "Operate",
-    items: [
-      { href: "/dashboard", label: "Overview", icon: "◆" },
-      { href: "/dashboard/players", label: "Players", icon: "◎" },
-      { href: "/dashboard/bugs", label: "Bug-Meldungen", icon: "✉" },
-    ],
-  },
-  {
-    title: "Configure",
-    items: [
-      { href: "/dashboard/keys", label: "API Keys", icon: "⌨" },
-      { href: "/dashboard/audit", label: "Verlauf", icon: "◉" },
-    ],
-  },
-]
+type Variant = "dashboard" | "admin"
 
-export default function Sidebar() {
+export default function Sidebar({ variant = "dashboard" }: { variant?: Variant }) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, toggle } = useTheme()
+  const base = variant === "admin" ? "/admin-dashboard" : "/dashboard"
+  const [openBugs, setOpenBugs] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (variant !== "admin") return
+    let cancelled = false
+    apiFetch("/api/bug-reports")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return
+        const reports: Array<{ resolved?: boolean }> = data.reports ?? []
+        setOpenBugs(reports.filter((r) => !r.resolved).length)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [variant])
 
   async function handleLogout() {
     await logout()
     router.push("/")
   }
 
+  const sections: Array<{ title: string; items: Array<{ href: string; label: string; icon: string; count?: number | null }> }> = [
+    {
+      title: "Betrieb",
+      items: [
+        { href: base, label: "Übersicht", icon: "◆" },
+        { href: `${base}/players`, label: "Spieler", icon: "◎" },
+        ...(variant === "admin"
+          ? [{ href: `${base}/bugs`, label: "Bug-Meldungen", icon: "✉", count: openBugs }]
+          : []),
+      ],
+    },
+    {
+      title: "Konfiguration",
+      items: [
+        { href: `${base}/keys`, label: "API-Keys", icon: "⌨" },
+        { href: `${base}/audit`, label: "Verlauf", icon: "◉" },
+      ],
+    },
+  ]
+
   return (
     <aside className="w-60 min-h-screen border-r flex flex-col shrink-0" style={{ borderColor: "var(--border)", backgroundColor: "var(--bg-card)" }}>
       <div className="px-5 py-6 border-b" style={{ borderColor: "var(--border)" }}>
-        <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center font-display font-bold" style={{ background: "linear-gradient(135deg, var(--accent), var(--cyan))", color: "#fff", boxShadow: "0 0 22px var(--glow-accent)" }}>
+        <Link href={base} className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center font-display font-bold" style={{ backgroundColor: "var(--accent)", color: "var(--accent-fg)" }}>
             S
           </div>
-          <div>
-            <div className="font-display font-bold leading-none" style={{ color: "var(--text-primary)" }}>StatusMod</div>
-            <div className="font-mono text-[10px] tracking-widest mt-1 flex items-center gap-1.5" style={{ color: "var(--text-muted)" }}>
-              <span className="pulse-dot" /> OPS
-            </div>
-          </div>
+          <div className="font-display font-bold leading-none" style={{ color: "var(--text-primary)" }}>StatusMod</div>
         </Link>
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-5 overflow-auto">
-        {navSections.map((section) => (
+        {sections.map((section) => (
           <div key={section.title}>
             <div className="kicker px-3 pb-2" style={{ fontSize: "10px" }}>{section.title}</div>
             <div className="space-y-1">
               {section.items.map((item) => {
-                const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
+                const active = pathname === item.href || (item.href !== base && pathname.startsWith(item.href))
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all font-medium"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors font-medium"
                     style={active ? {
-                      backgroundColor: "var(--accent-dim)",
+                      backgroundColor: "var(--accent-soft)",
                       color: "var(--text-primary)",
-                      border: "1px solid var(--accent-border)",
-                      boxShadow: "0 0 18px -6px var(--glow-accent)",
+                      border: "1px solid var(--accent-line)",
                     } : {
-                      color: "var(--text-muted)",
+                      color: "var(--text-secondary)",
                       border: "1px solid transparent",
                     }}
                     onMouseEnter={(e) => {
@@ -78,16 +95,16 @@ export default function Sidebar() {
                     }}
                     onMouseLeave={(e) => {
                       if (!active) {
-                        e.currentTarget.style.color = "var(--text-muted)"
+                        e.currentTarget.style.color = "var(--text-secondary)"
                         e.currentTarget.style.backgroundColor = ""
                       }
                     }}
                   >
-                    {active && (
-                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-full" style={{ background: "linear-gradient(var(--accent), var(--cyan))", boxShadow: "0 0 8px var(--glow-accent)" }} />
-                    )}
-                    <span className="w-5 text-center text-base" style={active ? { color: "var(--accent)" } : undefined}>{item.icon}</span>
+                    <span className="w-5 text-center text-base" style={active ? { color: "var(--accent-text)" } : undefined}>{item.icon}</span>
                     {item.label}
+                    {typeof item.count === "number" && item.count > 0 && (
+                      <span className="font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>· {item.count}</span>
+                    )}
                   </Link>
                 )
               })}
@@ -99,35 +116,35 @@ export default function Sidebar() {
       <div className="px-3 py-4 border-t space-y-1" style={{ borderColor: "var(--border)" }}>
         <button
           onClick={toggle}
-          className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm w-full transition-all"
-          style={{ color: "var(--text-muted)" }}
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm w-full transition-colors"
+          style={{ color: "var(--text-secondary)" }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.color = "var(--text-secondary)"
+            e.currentTarget.style.color = "var(--text-primary)"
             e.currentTarget.style.backgroundColor = "var(--bg-hover)"
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.color = "var(--text-muted)"
+            e.currentTarget.style.color = "var(--text-secondary)"
             e.currentTarget.style.backgroundColor = ""
           }}
         >
           <span className="w-5 text-center">{theme === "dark" ? "☀" : "☾"}</span>
-          {theme === "dark" ? "Light Mode" : "Dark Mode"}
+          {theme === "dark" ? "Helles Design" : "Dunkles Design"}
         </button>
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm w-full transition-all"
-          style={{ color: "var(--text-muted)" }}
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm w-full transition-colors"
+          style={{ color: "var(--text-secondary)" }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.color = "#ef4444"
-            e.currentTarget.style.backgroundColor = "rgba(239,68,68,0.08)"
+            e.currentTarget.style.color = "var(--red)"
+            e.currentTarget.style.backgroundColor = "var(--red-soft)"
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.color = "var(--text-muted)"
+            e.currentTarget.style.color = "var(--text-secondary)"
             e.currentTarget.style.backgroundColor = ""
           }}
         >
           <span className="w-5 text-center">✕</span>
-          Sign Out
+          Abmelden
         </button>
       </div>
     </aside>

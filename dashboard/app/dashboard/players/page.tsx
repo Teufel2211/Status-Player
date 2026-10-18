@@ -61,43 +61,42 @@ export default function PlayersPage() {
 
   return (
     <div>
-      <div className="mb-6 fade-up">
-        <div className="kicker mb-2">Roster · {players.length} known · {onlineCount} online</div>
+      <div className="mb-6">
+        <div className="kicker mb-2">Liste · {players.length} bekannt · {onlineCount} online</div>
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="font-display font-bold text-3xl text-glow" style={{ color: "var(--text-primary)" }}>Players</h1>
+          <h1 className="font-display font-bold text-3xl" style={{ color: "var(--text-primary)" }}>Spieler</h1>
           {connection === "connected" && (
             <span className="badge-green"><span className="pulse-dot mr-1.5" />live</span>
           )}
         </div>
       </div>
 
-      <div className="card mb-4 p-4 fade-up anim-d1">
+      <div className="card mb-4 !p-4">
         <div className="flex gap-2 flex-wrap">
           <div className="relative flex-1 min-w-[200px]">
             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-sm" style={{ color: "var(--text-muted)" }}>⌕</span>
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search name or UUID…"
+              placeholder="Name oder UUID suchen…"
               className="input !pl-10"
               spellCheck={false}
             />
           </div>
           <button
             onClick={() => setOnlineOnly(!onlineOnly)}
-            className={`font-mono text-xs px-4 rounded-xl border transition-all ${onlineOnly ? "" : ""}`}
+            className="font-mono text-xs px-4 rounded-lg border transition-colors"
             style={onlineOnly ? {
-              borderColor: "var(--accent-border)",
-              backgroundColor: "var(--accent-dim)",
-              color: "var(--accent)",
-              boxShadow: "0 0 14px var(--glow-accent)",
+              borderColor: "var(--accent-line)",
+              backgroundColor: "var(--accent-soft)",
+              color: "var(--accent-text)",
             } : {
               borderColor: "var(--border)",
               backgroundColor: "var(--bg-input)",
               color: "var(--text-muted)",
             }}
           >
-            ● online only
+            ● nur online
           </button>
         </div>
       </div>
@@ -109,42 +108,40 @@ export default function PlayersPage() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="card card-glow text-center py-12 fade-up">
-          <div className="font-display text-4xl mb-3" style={{ color: "var(--accent)", opacity: 0.5 }}>◎</div>
+        <div className="card text-center py-12">
+          <div className="font-display text-4xl mb-3" style={{ color: "var(--text-muted)" }}>◎</div>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            {players.length === 0 ? "No players yet" : "No match — try another search"}
+            {players.length === 0 ? "Noch keine Spieler" : "Kein Treffer — andere Suche probieren"}
           </p>
           <p className="text-xs mt-1 font-mono" style={{ color: "var(--text-muted)" }}>
-            {players.length === 0 ? "Players will appear here when they join the server" : `${players.length} known total`}
+            {players.length === 0 ? "Spieler erscheinen hier, sobald sie dem Server beitreten" : `${players.length} insgesamt bekannt`}
           </p>
         </div>
       ) : (
-        <div className="card card-glow p-0 overflow-hidden fade-up anim-d1">
+        <div className="card p-0 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b font-mono text-[11px] uppercase tracking-widest" style={{ borderColor: "var(--border)", backgroundColor: "var(--bg-primary)", color: "var(--text-muted)" }}>
-                <th className="text-left px-5 py-3 font-medium">Username</th>
+                <th className="text-left px-5 py-3 font-medium">Spieler</th>
                 <th className="text-left px-5 py-3 font-medium">Status</th>
                 <th className="text-left px-5 py-3 font-medium hidden md:table-cell">UUID</th>
-                <th className="text-left px-5 py-3 font-medium">Joined</th>
+                <th className="text-left px-5 py-3 font-medium">Beigetreten</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((p) => (
                 <tr
                   key={p.id}
-                  className="border-b last:border-0 transition-all cursor-pointer hover:-translate-y-px"
-                  style={{ borderColor: "var(--border)", opacity: p.is_online ? 1 : 0.5 }}
+                  className="border-b last:border-0 transition-colors cursor-pointer"
+                  style={{ borderColor: "var(--border)", opacity: p.is_online ? 1 : 0.55 }}
                   onClick={() => window.location.href = `/dashboard/players/${p.uuid}`}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.backgroundColor = "var(--bg-hover)"
                     e.currentTarget.style.opacity = "1"
-                    e.currentTarget.style.boxShadow = "inset 2px 0 0 var(--accent)"
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = ""
-                    e.currentTarget.style.opacity = p.is_online ? "1" : "0.5"
-                    e.currentTarget.style.boxShadow = ""
+                    e.currentTarget.style.opacity = p.is_online ? "1" : "0.55"
                   }}
                 >
                   <td className="px-5 py-3.5">
@@ -153,7 +150,7 @@ export default function PlayersPage() {
                       <span
                         className="w-1.5 h-1.5 rounded-full inline-block"
                         style={p.is_online
-                          ? { backgroundColor: "#10b981", boxShadow: "0 0 8px rgba(16,185,129,0.8)" }
+                          ? { backgroundColor: "var(--accent)" }
                           : { backgroundColor: "var(--border)" }}
                         title={p.is_online ? "online" : "offline"}
                       />
@@ -166,7 +163,7 @@ export default function PlayersPage() {
                         {p.color && (
                           <span
                             className="w-2 h-2 rounded-full inline-block"
-                            style={{ background: cssColor(p.color), boxShadow: `0 0 8px ${cssColor(p.color)}` }}
+                            style={{ background: cssColor(p.color) }}
                           />
                         )}
                         <span style={{ color: "var(--text-secondary)" }}>{p.status}</span>

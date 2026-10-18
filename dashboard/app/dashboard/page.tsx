@@ -34,25 +34,32 @@ export default function DashboardOverview() {
 
   return (
     <div>
-      <div className="card card-glow mb-6 fade-up overflow-hidden">
+      <div className="card mb-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <div className="kicker mb-2">Live ops · {live ? "streaming" : connection}</div>
-            <h1 className="font-display font-bold text-3xl sm:text-4xl text-glow" style={{ color: "var(--text-primary)" }}>
+            <div className="kicker mb-2">Übersicht · Live-Feed</div>
+            <h1 className="font-display font-bold text-3xl sm:text-4xl" style={{ color: "var(--text-primary)" }}>
               {livePlayers.length > 0 ? (
-                <><span className="text-gradient">{livePlayers.length}</span> online now</>
+                <>{livePlayers.length} online</>
               ) : (
-                <>All quiet<span className="text-gradient">.</span></>
+                <>Alles ruhig</>
               )}
             </h1>
             <p className="text-sm mt-2" style={{ color: "var(--text-muted)" }}>
-              {knownCount !== null ? `${knownCount} known players` : "Loading roster…"}
-              {" · "}{health?.status === "healthy" ? "systems nominal" : "checking systems…"}
+              {knownCount !== null ? `${knownCount} bekannte Spieler` : "Lade Spielerliste…"}
+              {" · "}{health?.status === "healthy" ? "Systeme in Ordnung" : "Systeme werden geprüft…"}
             </p>
           </div>
-          <div className="flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs" style={{ border: "1px solid var(--accent-border)", backgroundColor: "var(--accent-dim)", color: "var(--accent)" }}>
+          <div
+            className="flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs"
+            style={{
+              border: `1px solid ${live ? "var(--accent-line)" : "var(--border)"}`,
+              backgroundColor: live ? "var(--accent-soft)" : "var(--bg-hover)",
+              color: live ? "var(--accent-text)" : "var(--text-muted)",
+            }}
+          >
             <span className="pulse-dot" />
-            {live ? "LIVE FEED" : connection.toUpperCase()}
+            {live ? "LIVE" : connection === "connecting" ? "VERBINDET…" : "OFFLINE"}
           </div>
         </div>
       </div>
@@ -60,49 +67,49 @@ export default function DashboardOverview() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
           { label: "Server", value: health?.status === "healthy" ? "Online" : (health?.status ?? "—"), ok: health?.status === "healthy" },
-          { label: "Database", value: health?.database === "connected" ? "Linked" : (health?.database ?? "—"), ok: health?.database === "connected" },
-          { label: "Known players", value: knownCount !== null ? String(knownCount) : "—", ok: null },
-          { label: "Realtime", value: live ? "Live" : connection === "connecting" ? "…" : "Off", ok: live ? true : connection === "connecting" ? null : false },
-        ].map((s, i) => (
-          <div key={s.label} className={`card fade-up anim-d${i + 1} !p-5`}>
+          { label: "Datenbank", value: health?.database === "connected" ? "Verbunden" : (health?.database ?? "—"), ok: health?.database === "connected" },
+          { label: "Bekannte Spieler", value: knownCount !== null ? String(knownCount) : "—", ok: null },
+          { label: "Echtzeit", value: live ? "Live" : connection === "connecting" ? "…" : "Aus", ok: live ? true : connection === "connecting" ? null : false },
+        ].map((s) => (
+          <div key={s.label} className="card !p-5">
             <div className="kicker mb-2" style={{ fontSize: "10px" }}>{s.label}</div>
             <div className="flex items-center gap-2">
-              <span className="stat-num" style={{ fontSize: "1.5rem" }}>{s.value}</span>
+              <span className="stat-num">{s.value}</span>
               {s.ok === true && <span className="badge-green">OK</span>}
               {s.ok === false && <span className="badge-red">!</span>}
-              {s.ok === null && s.label === "Realtime" && <span className="badge-yellow">?</span>}
+              {s.ok === null && s.label === "Echtzeit" && <span className="badge-yellow">…</span>}
             </div>
           </div>
         ))}
       </div>
 
-      <div className="card card-glow mb-6 fade-up anim-d3">
+      <div className="card mb-6">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="pulse-dot" />
-            <h2 className="font-display font-semibold" style={{ color: "var(--text-primary)" }}>Live Players</h2>
+            <h2 className="font-display font-semibold" style={{ color: "var(--text-primary)" }}>Spieler online</h2>
           </div>
           <a href="/dashboard/players" className="font-mono text-xs underline underline-offset-2" style={{ color: "var(--text-muted)" }}>
-            roster →
+            zur Liste →
           </a>
         </div>
         {livePlayers.length === 0 ? (
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>Nobody online right now — the feed lights up on join.</p>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>Gerade ist niemand online — der Feed springt an, sobald jemand beitritt.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {livePlayers.map((p) => (
               <a
                 key={p.uuid}
                 href={`/dashboard/players/${p.uuid}`}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-sm hover:-translate-y-0.5"
+                className="flex items-center gap-2 px-3 py-2 rounded-xl transition-colors text-sm"
                 style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-primary)" }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent-border)"; e.currentTarget.style.boxShadow = "0 0 14px var(--glow-accent)" }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.boxShadow = "" }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent-line)" }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
               >
                 <PlayerAvatar uuid={p.uuid} username={p.username} avatar={p.avatar} sizePx={20} />
-                <span className="font-medium" style={{ color: "var(--text-primary)" }}>{p.username ?? "Unknown"}</span>
+                <span className="font-medium" style={{ color: "var(--text-primary)" }}>{p.username ?? "Unbekannt"}</span>
                 {p.status && (
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "var(--accent-dim)", color: "var(--accent)" }}>{p.status}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "var(--accent-soft)", color: "var(--accent-text)" }}>{p.status}</span>
                 )}
               </a>
             ))}
@@ -110,29 +117,23 @@ export default function DashboardOverview() {
         )}
       </div>
 
-      <div className="card fade-up anim-d4">
-        <div className="kicker mb-3">Shortcuts</div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="card">
+        <div className="kicker mb-3">Schnellzugriff</div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {[
-            { href: "/dashboard/players", label: "Players", icon: "◎", hint: "roster" },
-            { href: "/dashboard/keys", label: "Keys", icon: "⌨", hint: "access" },
-            { href: "/dashboard/audit", label: "Verlauf", icon: "◉", hint: "chronik" },
+            { href: "/dashboard/players", label: "Spieler", icon: "◎", hint: "Liste" },
+            { href: "/dashboard/keys", label: "API-Keys", icon: "⌨", hint: "Zugriff" },
+            { href: "/dashboard/audit", label: "Verlauf", icon: "◉", hint: "Chronik" },
           ].map((link) => (
             <a
               key={link.href}
               href={link.href}
-              className="rounded-xl px-3 py-3.5 transition-all hover:-translate-y-0.5 group"
+              className="rounded-xl px-3 py-3.5 transition-colors"
               style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-primary)" }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = "var(--accent-border)"
-                e.currentTarget.style.boxShadow = "0 0 18px var(--glow-accent)"
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = "var(--border)"
-                e.currentTarget.style.boxShadow = ""
-              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent-line)" }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
             >
-              <div className="font-display text-xl mb-1" style={{ color: "var(--accent)" }}>{link.icon}</div>
+              <div className="font-display text-xl mb-1" style={{ color: "var(--text-secondary)" }}>{link.icon}</div>
               <div className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{link.label}</div>
               <div className="font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>{link.hint}</div>
             </a>

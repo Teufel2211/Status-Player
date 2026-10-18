@@ -4,6 +4,8 @@
 **Status:** Mit Nutzer abgestimmt (Chat, 2026-10-18: „das passt"). Ersetzt den GitHub-Issue-Ansatz (uncommittet).
 **Betroffene Version:** 1.4.2 (auf `development`)
 
+> **Nachtrag 2026-10-19 (Dashboard-Redesign):** Der Posteingang lebt jetzt **nur noch im Admin-Dashboard** (`/admin-dashboard/bugs`, owner-only, alle Server). Die frühere Seite `/dashboard/bugs` samt Server-Session-Routen (`GET/PATCH/DELETE /api/bug-reports/[server_id]…`) wurde entfernt; neu sind `GET /api/bug-reports` (alle Server, owner-only) und `PATCH/DELETE /api/bug-reports/[id]` (owner-only). `POST /api/bug-report` (Mod) ist unverändert. Passagen unten, die den Posteingang im normalen Dashboard verorten, sind damit überholt.
+
 ## Ziel
 
 Ingame-Bug-Meldungen (`/bug <text>` im Mod) landen **privat im Dashboard** des jeweiligen Servers statt als öffentliches GitHub-Issue. Kein `GITHUB_TOKEN`/`GITHUB_REPO` nötig, keine Profildaten in öffentlichen Repos. Der Server-Admin bekommt einen Posteingang im Dashboard.

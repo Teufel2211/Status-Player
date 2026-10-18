@@ -1,26 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { apiFetch, getServerId, ensureSession } from "@/lib/client/auth"
-import { useRealtimePlayers } from "@/lib/client/use-realtime"
-import { PlayerAvatar } from "@/components/player-avatar"
-import FleetTopbar from "@/components/fleet-topbar"
-import Footer from "@/components/footer"
+import { useCallback, useEffect, useState } from "react"
+import { apiFetch, getServerId } from "@/lib/client/auth"
+import { cssColor } from "@/lib/color"
 
 type HealthData = {
   status: string
   database: string
   timestamp: string
   previous_secret_active?: boolean
-}
-
-type AuditEntry = {
-  id: number
-  server_id: string
-  action: string
-  detail: string | null
-  created_at: string
 }
 
 type FleetServer = {
@@ -32,19 +20,18 @@ type FleetServer = {
 
 type ApiKeyRow = {
   id: number
+  server_id: string
   key_prefix: string
   scopes: string[]
   created_at: string
-  expires_at: string
-  revoked: boolean
+  expires_at: string | null
 }
 
 type PresetRow = {
   name: string
   server_id: string
-  status: string | null
-  color: string | null
-  creator_uuid: string | null
+  status: string
+  color: string
 }
 
 type HistoryRow = {
@@ -54,643 +41,445 @@ type HistoryRow = {
   created_at: string | null
 }
 
-type Alert = {
-  level: "error" | "warn" | "info"
-  text: string
-}
-
-function ageString(iso: string | null): string {
-  if (!iso) return "noch nie"
-  const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
-  if (s < 60) return `vor ${s} Sek.`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `vor ${m} Min.`
-  const h = Math.floor(m / 60)
-  if (h < 48) return `vor ${h} Std.`
-  return `vor ${Math.floor(h / 24)} Tg.`
-}
-
-function actionColor(action: string): string {
-  const a = action.toLowerCase()
-  if (a.includes("mute") || a.includes("block") || a.includes("ban")) return "#ff5f5f"
-  if (a.includes("fleet") || a.includes("config") || a.includes("key")) return "var(--accent)"
-  if (a.includes("login") || a.includes("auth") || a.includes("code")) return "var(--cyan)"
-  return "var(--text-secondary)"
-}
-
-const SECTIONS: Array<[string, string]> = [
-  ["warnungen", "Warnungen"],
-  ["uebersicht", "Übersicht"],
-  ["server", "Server"],
-  ["spieler", "Spieler"],
-  ["presets", "Presets"],
-  ["verteilen", "Verteilung"],
-  ["ids", "IDs & Keys"],
-  ["protokoll", "Protokoll"],
-]
-
-function SectionHead({ id, kicker, title, sub }: { id: string; kicker: string; title: string; sub?: string }) {
+function SectionHead({ kicker, title, sub }: { kicker: string; title: string; sub?: string }) {
   return (
-    <div id={id} className="mb-4 scroll-mt-24">
+    <div className="mb-3">
       <div className="kicker mb-1">{kicker}</div>
-      <h2 className="font-display font-bold text-2xl" style={{ color: "var(--text-primary)" }}>{title}</h2>
+      <h2 className="font-display font-semibold text-xl" style={{ color: "var(--text-primary)" }}>{title}</h2>
       {sub && <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>{sub}</p>}
     </div>
   )
 }
 
-export default function FleetAdminPage() {
-  const router = useRouter()
-  const [authed, setAuthed] = useState(false)
-  const [checking, setChecking] = useState(true)
+export default function AdminOverviewPage() {
   const [health, setHealth] = useState<HealthData | null>(null)
-  const [knownCount, setKnownCount] = useState<number | null>(null)
-  const [activity, setActivity] = useState<AuditEntry[]>([])
   const [servers, setServers] = useState<FleetServer[]>([])
   const [keys, setKeys] = useState<ApiKeyRow[]>([])
   const [presets, setPresets] = useState<PresetRow[]>([])
-  const [history, setHistory] = useState<HistoryRow[]>([])
+  const [presetName, setPresetName] = useState("")
+  const [presetStatus, setPresetStatus] = useState("")
+  const [presetColor, setPresetColor] = useState("")
+  const [presetMsg, setPresetMsg] = useState("")
+  const [presetBusy, setPresetBusy] = useState(false)
   const [fleetUrl, setFleetUrl] = useState("")
   const [fleetSecret, setFleetSecret] = useState("")
   const [fleetUpdatedAt, setFleetUpdatedAt] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState("")
-  const [loaded, setLoaded] = useState(false)
-  const [serverId, setServerId] = useState("")
-  const [copiedId, setCopiedId] = useState("")
-  const [presetName, setPresetName] = useState("")
-  const [presetStatus, setPresetStatus] = useState("")
-  const [presetColor, setPresetColor] = useState("reset")
-  const [presetMsg, setPresetMsg] = useState("")
+  const [fleetMsg, setFleetMsg] = useState("")
+  const [fleetBusy, setFleetBusy] = useState(false)
+  const [history, setHistory] = useState<HistoryRow[]>([])
   const [restoreId, setRestoreId] = useState<number | null>(null)
-  const { players: livePlayers, connection } = useRealtimePlayers()
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    let cancelled = false
-    ensureSession().then((ok) => {
-      if (cancelled) return
-      if (ok) {
-        setAuthed(true)
-        setChecking(false)
-      } else {
-        router.push("/login")
-      }
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [router])
-
-  useEffect(() => {
-    if (!authed) return
-    fetch("/api/health")
-      .then((r) => r.json())
-      .then((d) => setHealth(d))
-      .catch(() => {})
+  const load = useCallback(async () => {
     const sid = getServerId()
+    const tasks: Promise<void>[] = []
+
+    tasks.push(
+      fetch("/api/health")
+        .then((r) => r.json())
+        .then((d) => setHealth(d))
+        .catch(() => {})
+    )
+    tasks.push(
+      apiFetch("/api/servers")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((d) => setServers(Array.isArray(d) ? d : []))
+        .catch(() => {})
+    )
+    tasks.push(
+      apiFetch("/api/admin/keys")
+        .then((r) => (r.ok ? r.json() : { keys: [] }))
+        .then((d) => setKeys(Array.isArray(d.keys) ? d.keys : []))
+        .catch(() => {})
+    )
+    tasks.push(
+      apiFetch("/api/fleet/config")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d) {
+            setFleetUrl(d.dashboard_url ?? "")
+            setFleetSecret(d.setup_secret ?? "")
+            setFleetUpdatedAt(d.updated_at ?? null)
+          }
+        })
+        .catch(() => {})
+    )
+    tasks.push(
+      apiFetch("/api/fleet/history")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((d) => setHistory(Array.isArray(d) ? d : []))
+        .catch(() => {})
+    )
     if (sid) {
-      setServerId(sid)
-      apiFetch(`/api/players/${sid}`)
-        .then((r) => (r.ok ? r.json() : []))
-        .then((d) => setKnownCount(Array.isArray(d) ? d.length : null))
-        .catch(() => {})
-      apiFetch(`/api/audit/${sid}`)
-        .then((r) => (r.ok ? r.json() : []))
-        .then((d) => setActivity(Array.isArray(d) ? d.slice(0, 10) : []))
-        .catch(() => {})
-      loadPresets(sid)
-    }
-    apiFetch(`/api/fleet/config`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!d) {
-          setMessage("Kein Zugriff – nur für Owner.")
-          return
-        }
-        if (typeof d.dashboard_url === "string") setFleetUrl(d.dashboard_url)
-        if (typeof d.setup_secret === "string") setFleetSecret(d.setup_secret)
-        if (typeof d.updated_at === "string") setFleetUpdatedAt(d.updated_at)
-        setLoaded(true)
-      })
-      .catch(() => setMessage("Laden fehlgeschlagen."))
-    apiFetch(`/api/servers`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setServers(Array.isArray(d) ? d : []))
-      .catch(() => {})
-    apiFetch(`/api/keys`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setKeys(Array.isArray(d) ? d : []))
-      .catch(() => {})
-    loadHistory()
-  }, [authed])
-
-  function loadPresets(sid: string) {
-    apiFetch(`/api/presets/${sid}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setPresets(Array.isArray(d) ? d : []))
-      .catch(() => {})
-  }
-
-  function loadHistory() {
-    apiFetch(`/api/fleet/history`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setHistory(Array.isArray(d) ? d : []))
-      .catch(() => {})
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    setMessage("")
-
-    try {
-      const res = await apiFetch(`/api/fleet/config`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dashboard_url: fleetUrl, setup_secret: fleetSecret }),
-      })
-
-      if (res.ok) {
-        setMessage("Gespeichert. Die Server übernehmen es in ca. 1 Minute (Neustart erforderlich).")
-        apiFetch(`/api/fleet/config`)
-          .then((r) => (r.ok ? r.json() : null))
-          .then((d) => {
-            if (d && typeof d.updated_at === "string") setFleetUpdatedAt(d.updated_at)
-          })
+      tasks.push(
+        apiFetch(`/api/presets/${sid}`)
+          .then((r) => (r.ok ? r.json() : []))
+          .then((d) => setPresets(Array.isArray(d) ? d : []))
           .catch(() => {})
-        loadHistory()
-      } else setMessage("Speichern fehlgeschlagen.")
-    } catch {
-      setMessage("Speichern fehlgeschlagen.")
-    } finally {
-      setSaving(false)
+      )
     }
+
+    await Promise.all(tasks)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  async function savePreset(e: React.FormEvent) {
+    e.preventDefault()
+    const sid = getServerId()
+    if (!sid || !presetName.trim() || !presetStatus.trim()) return
+    setPresetBusy(true)
+    setPresetMsg("")
+    try {
+      const r = await apiFetch(`/api/presets/${sid}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: presetName.trim(),
+          status: presetStatus.trim(),
+          color: presetColor.trim() || "reset",
+        }),
+      })
+      if (r.ok) {
+        setPresetName("")
+        setPresetStatus("")
+        setPresetColor("")
+        setPresetMsg("Preset gespeichert.")
+        await load()
+      } else {
+        setPresetMsg("Speichern fehlgeschlagen.")
+      }
+    } catch {
+      setPresetMsg("Netzwerkfehler.")
+    }
+    setPresetBusy(false)
   }
 
-  async function handleRollback(id: number) {
-    if (restoreId !== id) {
-      setRestoreId(id)
-      setTimeout(() => setRestoreId((cur) => (cur === id ? null : cur)), 6000)
+  async function deletePreset(name: string) {
+    const sid = getServerId()
+    if (!sid) return
+    try {
+      const r = await apiFetch(`/api/presets/${sid}/${encodeURIComponent(name)}`, { method: "DELETE" })
+      if (r.ok) await load()
+    } catch {}
+  }
+
+  async function saveFleet(e: React.FormEvent) {
+    e.preventDefault()
+    const body: Record<string, unknown> = {}
+    if (fleetUrl.trim() !== "") body.dashboard_url = fleetUrl.trim()
+    if (fleetSecret.trim() !== "") body.setup_secret = fleetSecret.trim()
+    if (Object.keys(body).length === 0) {
+      setFleetMsg("Bitte mindestens ein Feld ausfüllen.")
       return
     }
-    setRestoreId(null)
-    setSaving(true)
-    setMessage("")
+    setFleetBusy(true)
+    setFleetMsg("")
     try {
-      const res = await apiFetch(`/api/fleet/config`, {
+      const r = await apiFetch("/api/fleet/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (r.ok) {
+        setFleetMsg("Verteilt — die Server übernehmen die Werte in ca. 1 Minute (Neustart erforderlich).")
+        await load()
+      } else {
+        setFleetMsg("Speichern fehlgeschlagen.")
+      }
+    } catch {
+      setFleetMsg("Netzwerkfehler.")
+    }
+    setFleetBusy(false)
+  }
+
+  async function rollback(id: number) {
+    setRestoreId(id)
+    setFleetMsg("")
+    try {
+      const r = await apiFetch("/api/fleet/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ restore_id: id }),
       })
-      if (res.ok) {
-        setMessage("Zurückgesetzt. Die Server übernehmen es in ca. 1 Minute (Neustart erforderlich).")
-        const r = await apiFetch(`/api/fleet/config`)
-        if (r.ok) {
-          const d = await r.json()
-          if (typeof d.dashboard_url === "string") setFleetUrl(d.dashboard_url)
-          if (typeof d.setup_secret === "string") setFleetSecret(d.setup_secret)
-          if (typeof d.updated_at === "string") setFleetUpdatedAt(d.updated_at)
-        }
-        loadHistory()
-      } else setMessage("Zurücksetzen fehlgeschlagen.")
+      if (r.ok) {
+        setFleetMsg(`Stand #${id} wiederhergestellt — übernehmen die Server in ca. 1 Minute (Neustart erforderlich).`)
+        await load()
+      } else {
+        setFleetMsg("Zurücksetzen fehlgeschlagen.")
+      }
     } catch {
-      setMessage("Zurücksetzen fehlgeschlagen.")
-    } finally {
-      setSaving(false)
+      setFleetMsg("Netzwerkfehler.")
     }
+    setRestoreId(null)
   }
 
-  async function handlePresetAdd(e: React.FormEvent) {
-    e.preventDefault()
-    if (!serverId) return
-    setPresetMsg("")
+  async function copyId(id: string) {
     try {
-      const res = await apiFetch(`/api/presets/${serverId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: presetName, status: presetStatus, color: presetColor }),
-      })
-      if (res.ok) {
-        setPresetMsg("Preset gespeichert.")
-        setPresetName("")
-        setPresetStatus("")
-        loadPresets(serverId)
-      } else setPresetMsg("Speichern fehlgeschlagen.")
-    } catch {
-      setPresetMsg("Speichern fehlgeschlagen.")
-    }
-  }
-
-  async function handlePresetDelete(name: string) {
-    if (!serverId) return
-    try {
-      await apiFetch(`/api/presets/${serverId}/${encodeURIComponent(name)}`, { method: "DELETE" })
-      loadPresets(serverId)
-    } catch {}
-  }
-
-  function copyId(id: string) {
-    try {
-      navigator.clipboard.writeText(id)
+      await navigator.clipboard.writeText(id)
       setCopiedId(id)
-      setTimeout(() => setCopiedId((cur) => (cur === id ? "" : cur)), 2000)
+      setTimeout(() => setCopiedId(null), 2000)
     } catch {}
   }
 
-  if (checking) {
-    return (
-      <div className="fleet-theme min-h-screen flex items-center justify-center" style={{ backgroundColor: "var(--bg-primary)" }}>
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "var(--accent)" }} />
-          <span className="text-sm font-mono" style={{ color: "var(--text-muted)" }}>Verbindung wird aufgebaut…</span>
-        </div>
-      </div>
-    )
-  }
-
-  if (!authed) return null
-
-  const fleetActive = fleetSecret !== "" || fleetUrl !== ""
-  const live = connection === "connected"
-  const activeKeys = keys.filter((k) => !k.revoked)
-  const expiringKeys = activeKeys.filter((k) => {
+  const now = Date.now()
+  const activeKeys = keys.filter((k) => !k.expires_at || new Date(k.expires_at).getTime() > now)
+  const expiringSoon = activeKeys.filter((k) => {
     if (!k.expires_at) return false
-    const ms = new Date(k.expires_at).getTime() - Date.now()
-    return ms > 0 && ms < 7 * 24 * 60 * 60 * 1000
+    const ms = new Date(k.expires_at).getTime() - now
+    return ms > 0 && ms < 7 * 86400000
   })
+  const onlineTotal = servers.reduce((a, s) => a + (s.online ?? 0), 0)
+  const knownTotal = servers.reduce((a, s) => a + (s.known ?? 0), 0)
+  const fleetActive = fleetUrl.trim() !== "" && fleetSecret.trim() !== ""
 
+  type Alert = { level: "error" | "warn" | "info" | "ok"; text: string }
   const alerts: Alert[] = []
-  if (health && health.status !== "healthy") {
-    alerts.push({ level: "error", text: `System meldet: ${health.status} – Dashboard prüfen.` })
+  if (health && health.status !== "healthy") alerts.push({ level: "error", text: "Dashboard meldet Probleme — Dienst oder Datenbank nicht erreichbar." })
+  if (health?.previous_secret_active) alerts.push({ level: "warn", text: "Alter JWT-Schlüssel noch aktiv (JWT_SECRET_PREVIOUS) — Rotation abschließen." })
+  if (!loading && !fleetActive) alerts.push({ level: "warn", text: "Keine Verteilung aktiv — neue Server holen ihre Verbindungsdaten nicht automatisch." })
+  if (!loading && activeKeys.length === 0) alerts.push({ level: "warn", text: "Kein aktiver API-Key — der Mod kann sich nicht verbinden." })
+  for (const k of expiringSoon) {
+    alerts.push({ level: "warn", text: `Key ${k.key_prefix}… läuft ab am ${new Date(k.expires_at as string).toLocaleDateString()}.` })
   }
-  if (health && health.previous_secret_active) {
-    alerts.push({ level: "warn", text: "Altes JWT-Secret noch aktiv – Rotation abschließen (JWT_SECRET_PREVIOUS entfernen)." })
-  }
-  if (loaded && !fleetActive) {
-    alerts.push({ level: "warn", text: "Keine Verteilung aktiv. Unten Werte setzen." })
-  }
-  if (loaded && activeKeys.length === 0) {
-    alerts.push({ level: "warn", text: "Kein aktiver API-Key – Mods können nicht synchronisieren." })
-  }
-  expiringKeys.forEach((k) => {
-    alerts.push({ level: "warn", text: `API-Key ${k.key_prefix}… läuft bald ab (${new Date(k.expires_at).toLocaleDateString()}).` })
-  })
-  if (knownCount === 0) {
-    alerts.push({ level: "info", text: "Noch keine Spieler bekannt – kommen beim ersten Join." })
-  }
+  if (!loading && servers.length === 0) alerts.push({ level: "info", text: "Noch kein Server registriert — er erscheint automatisch beim ersten Setup." })
+  if (!loading && servers.length > 0 && knownTotal === 0) alerts.push({ level: "info", text: "Noch keine Spieler bekannt — die Daten kommen mit dem ersten Sync." })
+  if (!loading && alerts.length === 0) alerts.push({ level: "ok", text: "Alles in Ordnung." })
+
+  const alertColor = (level: Alert["level"]) =>
+    level === "error" ? "var(--red)" :
+    level === "warn" ? "var(--amber)" :
+    level === "ok" ? "var(--accent)" : "var(--text-muted)"
+  const alertLine = (level: Alert["level"]) =>
+    level === "error" ? "var(--red-line)" :
+    level === "warn" ? "var(--amber-line)" : "var(--border)"
 
   return (
-    <div className="fleet-theme min-h-screen hero-mesh bg-grid" style={{ backgroundColor: "var(--bg-primary)", color: "var(--text-primary)" }}>
-      <FleetTopbar />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        <div className="mb-6 fade-up">
-          <div className="kicker mb-2">Zentrale Steuerung · alle Server</div>
-          <h1 className="font-display font-bold text-3xl sm:text-4xl fleet-phosphor">
-            OPS<span className="fleet-blink">_</span>COMMAND
-          </h1>
+    <div>
+      <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
+        <div>
+          <div className="kicker mb-2">Admin-Dashboard · {servers.length} Server · {onlineTotal} online</div>
+          <h1 className="font-display font-bold text-3xl" style={{ color: "var(--text-primary)" }}>Übersicht</h1>
         </div>
+        <div
+          className="flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs"
+          style={{
+            border: `1px solid ${health?.status === "healthy" ? "var(--accent-line)" : "var(--border)"}`,
+            backgroundColor: health?.status === "healthy" ? "var(--accent-soft)" : "var(--bg-hover)",
+            color: health?.status === "healthy" ? "var(--accent-text)" : "var(--text-muted)",
+          }}
+        >
+          <span className="pulse-dot" />
+          {health?.status === "healthy" ? "VERBUNDEN" : health ? "GETRENNT" : "…"}
+        </div>
+      </div>
 
-        <nav className="sticky top-[64px] z-10 mb-8 fade-up anim-d1">
-          <div className="flex gap-2 overflow-x-auto py-2 px-3 rounded-xl" style={{ border: "1px solid var(--border)", backgroundColor: "color-mix(in srgb, var(--bg-primary) 90%, transparent)", backdropFilter: "blur(12px)" }}>
-            {SECTIONS.map(([id, label]) => (
-              <a
-                key={id}
-                href={`#${id}`}
-                className="font-mono text-xs px-3 py-1.5 rounded-lg whitespace-nowrap transition-all"
-                style={{ color: "var(--text-secondary)", border: "1px solid transparent" }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; e.currentTarget.style.borderColor = "var(--accent-border)" }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-secondary)"; e.currentTarget.style.borderColor = "transparent" }}
-              >
-                {label}
-              </a>
-            ))}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="card !p-5">
+          <div className="kicker mb-2" style={{ fontSize: "10px" }}>Server</div>
+          <span className="stat-num">{servers.length}</span>
+        </div>
+        <div className="card !p-5">
+          <div className="kicker mb-2" style={{ fontSize: "10px" }}>Spieler online</div>
+          <div className="flex items-center gap-2">
+            <span className="stat-num">{onlineTotal}</span>
+            {onlineTotal > 0 && <span className="pulse-dot" />}
           </div>
-        </nav>
+        </div>
+        <div className="card !p-5">
+          <div className="kicker mb-2" style={{ fontSize: "10px" }}>Datenbank</div>
+          <div className="flex items-center gap-2">
+            <span className="stat-num">{health ? (health.database === "connected" ? "OK" : "!") : "—"}</span>
+            {health && (health.database === "connected"
+              ? <span className="badge-green">verbunden</span>
+              : <span className="badge-red">Fehler</span>)}
+          </div>
+        </div>
+        <div className="card !p-5">
+          <div className="kicker mb-2" style={{ fontSize: "10px" }}>API-Keys aktiv</div>
+          <div className="flex items-center gap-2">
+            <span className="stat-num">{loading ? "—" : activeKeys.length}</span>
+            {expiringSoon.length > 0 && <span className="badge-yellow">{expiringSoon.length} bald ab</span>}
+          </div>
+        </div>
+      </div>
 
-        <section className="mb-8">
-          <SectionHead id="warnungen" kicker="Achtung" title="Warnungen & Ereignisse" sub={`${alerts.length} offen`} />
-          {alerts.length === 0 ? (
-            <div className="card fade-up flex items-center gap-3">
-              <span className="badge-green">OK</span>
-              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Alles ruhig – keine Warnungen.</span>
+      <div className="mb-8">
+        <SectionHead kicker="Status" title="Warnungen" sub="Was Aufmerksamkeit braucht — sonst ist alles ruhig." />
+        <div className="space-y-2">
+          {alerts.map((a, i) => (
+            <div
+              key={i}
+              className="card !py-3 !px-4 flex items-center gap-3"
+              style={{ borderColor: alertLine(a.level) }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: alertColor(a.level) }} />
+              <p className="text-sm" style={{ color: "var(--text-primary)" }}>{a.text}</p>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {alerts.map((a, i) => (
-                <div
-                  key={i}
-                  className="card fade-up !py-3 !px-4 flex items-center gap-3"
-                  style={a.level === "error"
-                    ? { borderColor: "rgba(255,95,95,0.45)" }
-                    : a.level === "warn"
-                      ? { borderColor: "var(--accent-border)" }
-                      : undefined}
-                >
-                  <span className={a.level === "error" ? "badge-red" : a.level === "warn" ? "badge-yellow" : "badge-green"}>
-                    {a.level === "error" ? "!" : a.level === "warn" ? "?" : "i"}
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-8">
+        <SectionHead kicker="Flotte" title="Alle Server" sub="Jeder Server meldet sich automatisch beim ersten Setup." />
+        {loading ? (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[0, 1, 2].map((i) => <div key={i} className="skeleton h-28" />)}
+          </div>
+        ) : servers.length === 0 ? (
+          <div className="card text-center py-10">
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>Noch kein Server registriert</p>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {servers.map((s) => (
+              <div key={s.id} className="card !p-5">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className="font-display font-semibold" style={{ color: "var(--text-primary)" }}>{s.id.slice(0, 8)}</span>
+                  <button
+                    onClick={() => copyId(s.id)}
+                    className="font-mono text-[11px] px-2.5 py-1 rounded-lg transition-colors"
+                    style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-primary)", color: "var(--text-muted)" }}
+                  >
+                    {copiedId === s.id ? "kopiert" : "ID kopieren"}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+                  {(s.online ?? 0) > 0 && <span className="pulse-dot" />}
+                  <span>
+                    {s.online ?? "—"} online · {s.known ?? "—"} bekannt
+                    {s.created_at ? ` · seit ${new Date(s.created_at).toLocaleDateString()}` : ""}
                   </span>
-                  <span className="text-sm" style={{ color: "var(--text-primary)" }}>{a.text}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="mb-8">
-          <SectionHead id="uebersicht" kicker="Live" title="Übersicht & Status" />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { label: "Server", value: health?.status === "healthy" ? "Online" : "…", ok: health?.status === "healthy" ? true : null as boolean | null },
-              { label: "Spieler online", value: String(livePlayers.length), ok: (livePlayers.length > 0 ? true : null) as boolean | null, sub: knownCount !== null ? `${knownCount} bekannt` : undefined },
-              { label: "Live-Feed", value: live ? "Verbunden" : connection === "connecting" ? "…" : "Getrennt", ok: live ? true : connection === "connecting" ? null : false },
-              { label: "Datenbank", value: health?.database === "connected" ? "Ok" : "…", ok: health?.database === "connected" ? true : null },
-            ].map((s, i) => (
-              <div key={s.label} className={`card fade-up anim-d${i + 1} !p-5`}>
-                <div className="kicker mb-2" style={{ fontSize: "10px" }}>{s.label}</div>
-                <div className="flex items-center gap-2">
-                  <span className="stat-num" style={{ fontSize: "1.5rem" }}>{s.value}</span>
-                  {s.ok === true && <span className="badge-green">OK</span>}
-                  {s.ok === false && <span className="badge-red">!</span>}
-                </div>
-                {s.sub && <div className="text-[11px] font-mono mt-1" style={{ color: "var(--text-muted)" }}>{s.sub}</div>}
+                <p className="text-[10px] font-mono mt-2 break-all" style={{ color: "var(--text-muted)" }}>{s.id}</p>
               </div>
             ))}
           </div>
-        </section>
+        )}
+      </div>
 
-        <section className="mb-8">
-          <SectionHead id="server" kicker="Server" title="Server & Details" sub={`${servers.length} Server`} />
-          {servers.length === 0 ? (
-            <div className="card fade-up">
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>Keine Server gefunden.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {servers.map((s, i) => (
-                <div key={s.id} className={`card card-glow fade-up anim-d${(i % 4) + 1}`}>
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <code className="text-sm font-mono font-bold" style={{ color: "var(--accent)" }}>{s.id.slice(0, 8)}…</code>
-                    <button
-                      onClick={() => copyId(s.id)}
-                      className="font-mono text-[11px] px-2.5 py-1 rounded-lg transition-all"
-                      style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}
-                    >
-                      {copiedId === s.id ? "kopiert!" : "ID kopieren"}
+      <div className="mb-8">
+        <SectionHead kicker="Verwaltung" title="Presets & Verteilung" sub="Schnellauswahl für deinen Server und Verbindungsdaten für die ganze Flotte." />
+        <div className="grid lg:grid-cols-2 gap-4 items-start">
+          <div className="card">
+            <h3 className="font-display font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Presets</h3>
+            {presets.length === 0 ? (
+              <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>Noch keine Presets.</p>
+            ) : (
+              <div className="space-y-2 mb-4">
+                {presets.map((p) => (
+                  <div
+                    key={p.name}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2"
+                    style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-primary)" }}
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0 inline-block" style={{ background: cssColor(p.color || "reset") }} />
+                    <span className="font-mono text-xs" style={{ color: "var(--text-primary)" }}>{p.name}</span>
+                    <span className="text-xs flex-1 min-w-0 truncate" style={{ color: "var(--text-muted)" }}>{p.status}</span>
+                    <button onClick={() => deletePreset(p.name)} className="text-xs transition-opacity hover:opacity-80" style={{ color: "var(--red)" }}>
+                      Löschen
                     </button>
-                  </div>
-                  <div className="font-mono text-[11px] break-all mb-3" style={{ color: "var(--text-muted)" }}>{s.id}</div>
-                  <div className="flex gap-4 font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
-                    <span><span className="pulse-dot mr-1.5" />{s.online ?? "?"} online</span>
-                    <span>{s.known ?? "?"} bekannt</span>
-                    <span>seit {s.created_at ? new Date(s.created_at).toLocaleDateString() : "?"}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="mb-8">
-          <SectionHead id="spieler" kicker="Roster" title="Spieler" sub={livePlayers.length > 0 ? `${livePlayers.length} online` : "Niemand online"} />
-          <div className="card card-glow fade-up">
-            {livePlayers.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>Niemand online. <a href="/dashboard/players" className="underline underline-offset-2" style={{ color: "var(--accent)" }}>Zum Spieler-Roster →</a></p>
-            ) : (
-              <>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {livePlayers.map((p) => (
-                    <a
-                      key={p.uuid}
-                      href={`/dashboard/players/${p.uuid}`}
-                      className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-sm hover:-translate-y-0.5"
-                      style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-primary)" }}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent-border)"; e.currentTarget.style.boxShadow = "0 0 14px var(--glow-accent)" }}
-                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.boxShadow = "" }}
-                    >
-                      <PlayerAvatar uuid={p.uuid} username={p.username} avatar={p.avatar} sizePx={20} />
-                      <span style={{ color: "var(--text-primary)" }}>{p.username ?? "Unknown"}</span>
-                      {p.status && (
-                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>[{p.status}]</span>
-                      )}
-                    </a>
-                  ))}
-                </div>
-                <a href="/dashboard/players" className="font-mono text-xs underline underline-offset-2" style={{ color: "var(--accent)" }}>
-                  Alle Spieler verwalten (Status setzen, Details) →
-                </a>
-              </>
-            )}
-          </div>
-        </section>
-
-        <section className="mb-8">
-          <SectionHead id="presets" kicker="Inhalte" title="Presets" sub="Status-Presets" />
-          <div className="grid grid-cols-1 gap-4">
-            <div className="card card-glow fade-up anim-d1">
-              <h3 className="font-display font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Presets ({presets.length})</h3>
-              {presets.length > 0 && (
-                <div className="space-y-1.5 mb-4 max-h-44 overflow-auto">
-                  {presets.map((p) => (
-                    <div key={p.name} className="flex items-center gap-2 py-1.5 border-b last:border-0" style={{ borderColor: "var(--border)" }}>
-                      <code className="text-xs font-mono font-bold" style={{ color: "var(--accent)" }}>{p.name}</code>
-                      <span className="text-xs truncate flex-1" style={{ color: "var(--text-secondary)" }}>{p.status ?? "—"}</span>
-                      <button
-                        onClick={() => handlePresetDelete(p.name)}
-                        className="font-mono text-[11px] transition-colors"
-                        style={{ color: "var(--text-muted)" }}
-                        onMouseEnter={(e) => { e.currentTarget.style.color = "#ff5f5f" }}
-                        onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)" }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <form onSubmit={handlePresetAdd} className="grid grid-cols-3 gap-2">
-                <input value={presetName} onChange={(e) => setPresetName(e.target.value)} placeholder="Name" maxLength={32} className="input text-xs" spellCheck={false} />
-                <input value={presetStatus} onChange={(e) => setPresetStatus(e.target.value)} placeholder="Status" maxLength={64} className="input text-xs" spellCheck={false} />
-                <input value={presetColor} onChange={(e) => setPresetColor(e.target.value)} placeholder="Farbe" maxLength={32} className="input text-xs" spellCheck={false} />
-                <button type="submit" className="btn-primary text-xs px-3 py-2 col-span-3">Preset speichern</button>
-              </form>
-              {presetMsg && (
-                <p className="text-xs font-mono mt-2" style={{ color: presetMsg.includes("gespeichert") ? "var(--accent)" : "#ff5f5f" }}>{presetMsg}</p>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="mb-8">
-          <SectionHead id="verteilen" kicker="Zentral" title="Verteilung & Rollbacks" sub={fleetUpdatedAt ? `Stand ${ageString(fleetUpdatedAt)}` : "Noch nie verteilt"} />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="card card-glow fade-up">
-              <label className="label">Dashboard-URL</label>
-              <input
-                className="input font-mono text-xs w-full"
-                value={fleetUrl}
-                onChange={(e) => setFleetUrl(e.target.value)}
-                placeholder="https://statusmod-dashboard.vercel.app"
-                spellCheck={false}
-                disabled={!loaded}
-              />
-              <label className="label mt-4">Setup-Secret</label>
-              <input
-                className="input font-mono text-xs w-full"
-                type="password"
-                value={fleetSecret}
-                onChange={(e) => setFleetSecret(e.target.value)}
-                placeholder="Gleicher Wert für alle Server"
-                spellCheck={false}
-                autoComplete="new-password"
-                disabled={!loaded}
-              />
-              <button className="btn-primary w-full mt-4 text-sm" onClick={handleSave} disabled={saving || !loaded}>
-                {saving ? "Wird verteilt…" : "Auf alle Server verteilen"}
-              </button>
-              {message && (
-                <p className="text-xs mt-3 font-mono" style={{ color: message.startsWith("Gespeichert") || message.startsWith("Zurückgesetzt") ? "var(--accent)" : "#ff5f5f" }}>
-                  {message}
-                </p>
-              )}
-              <p className="text-[11px] font-mono mt-3" style={{ color: "var(--text-muted)" }}>
-                Datei: config/statusmodfleet/config.json · ca. 1 Minute + Neustart
-              </p>
-            </div>
-            <div className="card fade-up anim-d1">
-              <h3 className="font-display font-semibold mb-1" style={{ color: "var(--text-primary)" }}>Verlauf & Rollback</h3>
-              <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>Jede Verteilung wird gespeichert. Zweimal klicken zum Zurücksetzen.</p>
-              {history.length === 0 ? (
-                <p className="text-sm" style={{ color: "var(--text-muted)" }}>Noch keine Verteilungen.</p>
-              ) : (
-                <div className="space-y-2 max-h-72 overflow-auto">
-                  {history.map((h) => (
-                    <div key={h.id} className="flex items-center gap-3 py-2 border-b last:border-0" style={{ borderColor: "var(--border)" }}>
-                      <span className="font-mono text-xs font-bold shrink-0" style={{ color: "var(--accent)" }}>#{h.id}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>{h.dashboard_url || "(leere URL)"}</div>
-                        <div className="font-mono text-[10px]" style={{ color: "var(--text-muted)" }}>
-                          {h.created_at ? new Date(h.created_at).toLocaleString() : "—"} · {h.has_secret ? "Secret gesetzt" : "kein Secret"}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleRollback(h.id)}
-                        disabled={saving}
-                        className="font-mono text-[11px] px-2.5 py-1.5 rounded-lg transition-all shrink-0"
-                        style={restoreId === h.id
-                          ? { border: "1px solid #ff5f5f", color: "#ff5f5f", backgroundColor: "rgba(255,95,95,0.1)" }
-                          : { border: "1px solid var(--border)", color: "var(--text-muted)" }}
-                      >
-                        {restoreId === h.id ? "Sicher?" : "↩"}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="mb-8">
-          <SectionHead id="ids" kicker="Identität" title="Server-IDs & API-Schlüssel" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="card fade-up">
-              <h3 className="font-display font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Server-IDs ({servers.length})</h3>
-              {servers.length === 0 ? (
-                <p className="text-sm" style={{ color: "var(--text-muted)" }}>Keine Server gefunden.</p>
-              ) : (
-                <div className="space-y-2">
-                  {servers.map((s) => (
-                    <div key={s.id} className="flex items-center gap-2 py-1.5 border-b last:border-0" style={{ borderColor: "var(--border)" }}>
-                      <code className="text-xs font-mono break-all flex-1" style={{ color: "var(--text-secondary)" }}>{s.id}</code>
-                      <button
-                        onClick={() => copyId(s.id)}
-                        className="font-mono text-[11px] px-2 py-1 rounded-lg shrink-0 transition-all"
-                        style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}
-                      >
-                        {copiedId === s.id ? "kopiert!" : "kopieren"}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="card card-glow fade-up anim-d1">
-              <h3 className="font-display font-semibold mb-1" style={{ color: "var(--text-primary)" }}>API-Schlüssel</h3>
-              <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
-                {activeKeys.length} aktiv{expiringKeys.length > 0 ? ` · ${expiringKeys.length} läuft bald ab` : ""}
-              </p>
-              {keys.length === 0 ? (
-                <p className="text-sm" style={{ color: "var(--text-muted)" }}>Keine Keys vorhanden.</p>
-              ) : (
-                <div className="space-y-1.5 mb-3">
-                  {keys.slice(0, 5).map((k) => (
-                    <div key={k.id} className="flex items-center gap-2 font-mono text-xs">
-                      <code style={{ color: "var(--text-secondary)" }}>{k.key_prefix}…</code>
-                      <span className={k.revoked ? "badge-red" : "badge-green"}>{k.revoked ? "aus" : "an"}</span>
-                      {k.expires_at && (
-                        <span style={{ color: "var(--text-muted)" }}>bis {new Date(k.expires_at).toLocaleDateString()}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-              <a href="/dashboard/keys" className="btn-secondary text-xs px-4 py-2">Keys verwalten →</a>
-            </div>
-          </div>
-        </section>
-
-        <section className="mb-4">
-          <SectionHead id="protokoll" kicker="Nachweis" title="Audit-Protokoll" />
-          <div className="card fade-up">
-            <div className="flex items-center justify-between mb-3">
-              <span className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>Neueste {activity.length} Einträge</span>
-              <a href="/dashboard/audit" className="font-mono text-xs underline underline-offset-2" style={{ color: "var(--accent)" }}>
-                Vollständiges Protokoll →
-              </a>
-            </div>
-            {activity.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>Noch keine Einträge.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {activity.map((entry) => (
-                  <div key={entry.id} className="flex items-baseline gap-3 text-xs sm:text-sm">
-                    <span className="shrink-0 tabular-nums" style={{ color: "var(--text-muted)" }}>
-                      {new Date(entry.created_at).toLocaleString()}
-                    </span>
-                    <span className="shrink-0 font-bold font-mono" style={{ color: actionColor(entry.action) }}>
-                      [{entry.action}]
-                    </span>
-                    {entry.detail && (
-                      <span className="truncate" style={{ color: "var(--text-secondary)" }}>{entry.detail}</span>
-                    )}
                   </div>
                 ))}
               </div>
             )}
+            <form onSubmit={savePreset} className="space-y-3">
+              <div>
+                <label className="label">Name</label>
+                <input className="input" value={presetName} onChange={(e) => setPresetName(e.target.value)} maxLength={32} placeholder="z. B. farmen" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="label">Status</label>
+                  <input className="input" value={presetStatus} onChange={(e) => setPresetStatus(e.target.value)} maxLength={64} placeholder="Farmen" />
+                </div>
+                <div>
+                  <label className="label">Farbe (optional)</label>
+                  <input className="input" value={presetColor} onChange={(e) => setPresetColor(e.target.value)} maxLength={32} placeholder="green" />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button type="submit" className="btn-primary text-xs px-4 py-2" disabled={presetBusy || !presetName.trim() || !presetStatus.trim()}>
+                  {presetBusy ? "Speichert…" : "Preset speichern"}
+                </button>
+                {presetMsg && <span className="text-xs" style={{ color: "var(--text-muted)" }}>{presetMsg}</span>}
+              </div>
+            </form>
           </div>
-        </section>
 
-        <nav className="sticky bottom-4 z-10 mb-2">
-          <div className="flex gap-2 overflow-x-auto py-2 px-3 rounded-xl mx-auto w-fit max-w-full" style={{ border: "1px solid var(--border)", backgroundColor: "color-mix(in srgb, var(--bg-primary) 90%, transparent)", backdropFilter: "blur(12px)" }}>
-            {SECTIONS.map(([id, label]) => (
-              <a
-                key={id}
-                href={`#${id}`}
-                className="font-mono text-[11px] px-2.5 py-1 rounded-lg whitespace-nowrap transition-all"
-                style={{ color: "var(--text-secondary)" }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)" }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-secondary)" }}
-              >
-                {label}
-              </a>
-            ))}
+          <div className="card">
+            <h3 className="font-display font-semibold mb-1" style={{ color: "var(--text-primary)" }}>Verteilung</h3>
+            <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
+              Verbindungsdaten für alle Server der Flotte. Mods holen sie sich automatisch beim Start.
+            </p>
+            <form onSubmit={saveFleet} className="space-y-3">
+              <div>
+                <label className="label">Dashboard-URL</label>
+                <input className="input font-mono text-xs" value={fleetUrl} onChange={(e) => setFleetUrl(e.target.value)} maxLength={256} placeholder="https://statusmod-dashboard.vercel.app" />
+              </div>
+              <div>
+                <label className="label">Setup-Secret</label>
+                <input className="input font-mono text-xs" value={fleetSecret} onChange={(e) => setFleetSecret(e.target.value)} maxLength={512} placeholder="…" />
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button type="submit" className="btn-primary text-xs px-4 py-2" disabled={fleetBusy}>
+                  {fleetBusy ? "Verteilt…" : "Verteilen"}
+                </button>
+                {fleetUpdatedAt && (
+                  <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>
+                    zuletzt {new Date(fleetUpdatedAt).toLocaleString()}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                Die Server übernehmen Änderungen in ca. 1 Minute — Neustart erforderlich.
+              </p>
+              {fleetMsg && <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{fleetMsg}</p>}
+            </form>
           </div>
-        </nav>
+        </div>
 
-        <p className="font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>
-          Owner-Code: <span style={{ color: "var(--text-secondary)" }}>/fleet owner-code</span> in der Server-Konsole erzeugen, dann hier über Login einlösen<span className="fleet-blink" style={{ color: "var(--accent)" }}>▌</span>
-        </p>
+        <div className="card mt-4">
+          <h3 className="font-display font-semibold mb-1" style={{ color: "var(--text-primary)" }}>Verlauf & Rollback</h3>
+          <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>Die letzten Verteilungen — jeder Stand lässt sich wiederherstellen.</p>
+          {history.length === 0 ? (
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>Noch keine Einträge.</p>
+          ) : (
+            <div className="space-y-2">
+              {history.map((h) => (
+                <div
+                  key={h.id}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2 flex-wrap"
+                  style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-primary)" }}
+                >
+                  <span className="font-mono text-[10px]" style={{ color: "var(--text-muted)" }}>#{h.id}</span>
+                  <span className="text-xs font-mono flex-1 min-w-[160px] truncate" style={{ color: "var(--text-secondary)" }}>
+                    {h.dashboard_url || "—"}
+                  </span>
+                  <span className="badge-neutral text-[10px]" style={{ opacity: h.has_secret ? 1 : 0.5 }}>
+                    {h.has_secret ? "mit Secret" : "ohne Secret"}
+                  </span>
+                  <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>
+                    {h.created_at ? new Date(h.created_at).toLocaleString() : ""}
+                  </span>
+                  <button
+                    onClick={() => rollback(h.id)}
+                    disabled={restoreId !== null}
+                    className="text-xs transition-opacity hover:opacity-80 disabled:opacity-40"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    {restoreId === h.id ? "Setzt zurück…" : "Zurückrollen"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-      <Footer className="px-6 pb-6" />
     </div>
   )
 }
