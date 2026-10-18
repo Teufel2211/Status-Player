@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+- New `/bug <text>` command: report bugs right from the game. The report (player name, server, mod/MC version, loader) lands in the dashboard inbox of the server team. Needs a dashboard-connected server; can be toggled with `/status feature bug`.
+
 ## 1.4.1 - 2026-10-15
 
 - Geyser support for MC 26.3: the Bedrock-incompatibility warnings are gone (console, join ping, `/status version`).

@@ -643,7 +643,7 @@ public class StatusCommand {
      * Helps diagnosing 401s (wrong key/server) without touching files.
      */
     private static void showVersion(CommandSourceStack src) {
-        CommandUtil.sendSuccess(src, Component.literal("StatusMod 1.4.1 (build " + StatusMod.BUILD + ")"), false);
+        CommandUtil.sendSuccess(src, Component.literal("StatusMod " + StatusMod.VERSION + " (build " + StatusMod.BUILD + ")"), false);
     }
 
     private static void showSyncStatus(CommandSourceStack src) {

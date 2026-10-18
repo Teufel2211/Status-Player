@@ -151,6 +151,7 @@ ALLOW_HTTP=false
 | RATE_LIMIT_MAX_CODE_GENERATION | 3 | Pro IP / Window |
 | RATE_LIMIT_MAX_TOTP_VERIFY | 5 | Pro UUID / Window |
 | RATE_LIMIT_MAX_KEY_REVOKE | 3 | Pro Session / Window |
+| RATE_LIMIT_MAX_BUG_REPORT | 3 | Pro Server + Spieler-UUID / 10 Min |
 
 ### API Endpunkte — Auth
 
@@ -185,6 +186,10 @@ ALLOW_HTTP=false
 | `/api/audit/:server_id` | GET | API-Key | audit | Audit-Log |
 | `/api/server/:server_id/config` | GET | API-Key | check | Config lesen |
 | `/api/server/:server_id/config` | PUT | Session | – | Config schreiben |
+| `/api/bug-report` | POST | API-Key | check | Ingame-Bugmeldung → Dashboard-Posteingang |
+| `/api/bug-reports/:server_id` | GET | Session | – | Bug-Meldungen (neueste zuerst) |
+| `/api/bug-reports/:server_id/:id` | PATCH | Session | – | Meldung offen/erledigt setzen |
+| `/api/bug-reports/:server_id/:id` | DELETE | Session | – | Meldung löschen |
 
 ### ~~API Endpunkte — Shop~~ (ENTFERNT 2026-08-01)
 

@@ -47,6 +47,7 @@ export const RATE_LIMITS = {
   LOGIN: { windowMs: 60_000, max: 3 },
   CODE_GENERATION: { windowMs: 60_000, max: 3 },
   TOTP_VERIFY: { windowMs: 60_000, max: 5 },
+  BUG_REPORT: { windowMs: 600_000, max: 3 },
 } as const
 
 const LOGIN_LOCKOUT = {

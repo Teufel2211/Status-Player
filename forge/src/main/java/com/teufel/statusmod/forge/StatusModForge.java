@@ -2,6 +2,7 @@ package com.teufel.statusmod.forge;
 
 import com.teufel.statusmod.StatusMod;
 import com.teufel.statusmod.command.BlockCommand;
+import com.teufel.statusmod.command.BugCommand;
 import com.teufel.statusmod.command.CodeCommand;
 import com.teufel.statusmod.command.ColorCommand;
 import com.teufel.statusmod.command.ModInfoCommand;
@@ -31,6 +32,7 @@ public final class StatusModForge {
         BlockCommand.register(event.getDispatcher());
         ColorCommand.register(event.getDispatcher());
         CodeCommand.register(event.getDispatcher());
+        BugCommand.register(event.getDispatcher());
     }
 
     @SubscribeEvent

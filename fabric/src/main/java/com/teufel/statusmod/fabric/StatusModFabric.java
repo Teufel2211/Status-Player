@@ -2,6 +2,7 @@ package com.teufel.statusmod.fabric;
 
 import com.teufel.statusmod.StatusMod;
 import com.teufel.statusmod.command.BlockCommand;
+import com.teufel.statusmod.command.BugCommand;
 import com.teufel.statusmod.command.CodeCommand;
 import com.teufel.statusmod.command.ColorCommand;
 import com.teufel.statusmod.command.ModInfoCommand;
@@ -24,6 +25,7 @@ public final class StatusModFabric implements ModInitializer {
             BlockCommand.register(dispatcher);
             ColorCommand.register(dispatcher);
             CodeCommand.register(dispatcher);
+            BugCommand.register(dispatcher);
         });
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> StatusLifecycle.onPlayerJoin(server, handler.getPlayer()));
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> StatusLifecycle.onPlayerDisconnect(handler.getPlayer()));

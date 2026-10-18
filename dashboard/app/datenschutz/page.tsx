@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function DatenschutzPage() {
   return (
-    <LegalLayout title="Datenschutzerklärung" updated="31. Juli 2026">
+    <LegalLayout title="Datenschutzerklärung" updated="18. Oktober 2026">
       <h2>1. Verantwortlicher</h2>
       <p>
         Verantwortlicher für die Datenverarbeitung im Sinne der Datenschutz-Grundverordnung (DSGVO) ist der Betreiber
@@ -49,6 +49,15 @@ export default function DatenschutzPage() {
         Im Rahmen des Dienstes können Spielerinformationen (Nutzername, UUID, Status) verarbeitet werden, die vom
         Minecraft-Server des Nutzers übermittelt werden. Die Verantwortung für diese Daten liegt beim jeweiligen
         Serverbetreiber als Auftraggeber.
+      </p>
+
+      <h3>3.5 Ingame-Bug-Meldungen (/bug)</h3>
+      <p>
+        Meldet ein Spieler über den Ingame-Befehl <code>/bug</code> einen Fehler, übermittelt der Minecraft-Server des
+        Betreibers den Meldetext, den Spielernamen sowie technische Angaben (Server-ID, Mod-Version, Minecraft-Version,
+        Loader) an das Dashboard. Die Meldung wird dort für die Administratoren des jeweiligen Servers gespeichert und
+        angezeigt. Die Verarbeitung dient der Fehleranalyse und Nachvollziehbarkeit (Art. 6 Abs. 1 lit. f DSGVO). Die
+        Nutzung des Befehls ist freiwillig; Administratoren können Meldungen jederzeit löschen.
       </p>
 
       <h2>4. Sicherheit der Verarbeitung</h2>

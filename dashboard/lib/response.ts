@@ -31,3 +31,11 @@ export function tooMany(message = "Ungültige Anfrage") {
 export function serverError(message = "Interner Fehler") {
   return NextResponse.json({ error: message }, { status: 500 })
 }
+
+export function badGateway(message = "Fehler im externen Dienst") {
+  return NextResponse.json({ error: message }, { status: 502 })
+}
+
+export function notFound(message = "Nicht gefunden") {
+  return NextResponse.json({ error: message }, { status: 404 })
+}

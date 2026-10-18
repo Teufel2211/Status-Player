@@ -5,7 +5,7 @@ Abhaken der Reihe nach. Alles auf `development` vorbereiten, erst ganz am Ende n
 ## 1. Code fertig
 
 - [ ] Alle Features/Fixes auf `development` committet, Baum sauber (`git status` leer)
-- [ ] `version.txt` = `1.4.1`
+- [ ] `version.txt` = `1.4.1` **und** `StatusMod.VERSION` (`common/.../statusmod/StatusMod.java`) auf denselben Wert gesetzt — beide müssen identisch sein (`/status version` liest die Konstante)
 - [ ] `CHANGELOG.md` → `## Unreleased` in `## 1.4.1` umbenannt (kein Fleet in sichtbaren Texten!)
 
 ## 2. Builds

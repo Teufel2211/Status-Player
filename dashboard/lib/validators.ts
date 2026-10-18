@@ -44,6 +44,21 @@ export const FleetConfigSchema = z.object({
   restore_id: z.number().int().positive().optional(),
 })
 
+export const BugReportSchema = z.object({
+  server_id: z.string().regex(uuidRegex),
+  // Nur für den Rate-Limit-Schlüssel - wird nicht gespeichert.
+  uuid: z.string().min(1).max(64),
+  player: z.string().min(1).max(32),
+  text: z.string().min(10).max(2000),
+  mod_version: z.string().max(32).optional().default("unknown"),
+  mc_version: z.string().max(32).optional().default("unknown"),
+  loader: z.string().max(32).optional().default("unknown"),
+})
+
+export const BugReportUpdateSchema = z.object({
+  resolved: z.boolean(),
+})
+
 export function validatePathUuid(value: string): boolean {
   return uuidRegex.test(value)
 }

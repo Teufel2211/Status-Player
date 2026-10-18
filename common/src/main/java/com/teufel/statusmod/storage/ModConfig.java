@@ -31,7 +31,7 @@ public class ModConfig {
     public Map<String, Boolean> features = new HashMap<>();
 
     private static final String[] FEATURE_KEYS = {
-        "status", "badge", "afk", "block", "mute", "presets", "code", "sync"
+        "status", "badge", "afk", "block", "mute", "presets", "code", "sync", "bug"
     };
 
     public boolean isEnabled(String key) {

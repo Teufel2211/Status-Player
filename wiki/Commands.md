@@ -30,6 +30,10 @@ Legend: `(admin)` needs OP level (default 2, see `adminOpLevel`) or the `statusm
 - `/status sidebar <on|off>` — sidebar status list
 - `/status topbar <on|off>` — boss-bar status display
 
+## Bugs
+
+- `/bug <text>` — report a bug; requires the server to be connected to a dashboard (the report lands in the server team's dashboard)
+
 ## Admin
 
 - `/status gui [page] [search]` — player-head GUI (click a head to prepare set/color)
@@ -38,7 +42,7 @@ Legend: `(admin)` needs OP level (default 2, see `adminOpLevel`) or the `statusm
 - `/status admin clear <player>` — clear someone's status
 - `/status admin mute <player> <minutes>` / `/status admin unmute <player>` — mute from StatusMod
 - `/status badge <player> <text> [color]` — staff badge; `/status badge clear <player>`
-- `/status feature list` / `/status feature <key> <on|off>` — toggles: `status badge afk block mute presets code sync`
+- `/status feature list` / `/status feature <key> <on|off>` — toggles: `status badge afk block mute presets code sync bug`
 - `/status config show` / `/status config reload` — view/reload config
 - `/status sync` — sync wiring + last push/pull (shows key prefix only)
 - `/status apikey <key>` — store dashboard API key (**prefer console**: typed commands land in the server log)
