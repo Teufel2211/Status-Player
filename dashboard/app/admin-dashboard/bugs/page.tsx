@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { apiFetch } from "@/lib/client/auth"
 import { ago } from "@/lib/audit-format"
 
@@ -15,7 +15,18 @@ type BugReport = {
   resolved: boolean
   created_at: string
   resolved_at: string | null
+  image_count: number
 }
+
+type BugImage = {
+  id: number
+  url: string | null
+  mime: string
+  size_bytes: number
+  created_at: string
+}
+
+type ImageState = { loading: boolean; items: BugImage[]; error?: string }
 
 type Filter = "open" | "all" | "done"
 
@@ -24,14 +35,23 @@ export default function AdminBugsPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>("open")
   const [busyId, setBusyId] = useState<number | null>(null)
+  const [openImages, setOpenImages] = useState<number | null>(null)
+  const [images, setImages] = useState<Record<number, ImageState>>({})
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true)
+    setError(null)
     apiFetch("/api/bug-reports")
       .then((r) => (r.ok ? r.json() : { reports: [] }))
       .then((d) => setReports(Array.isArray(d.reports) ? d.reports : []))
-      .catch(() => {})
+      .catch(() => setError("Meldungen konnten nicht geladen werden."))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
 
   const counts = useMemo(() => ({
     open: reports.filter((r) => !r.resolved).length,
@@ -45,6 +65,7 @@ export default function AdminBugsPage() {
 
   async function setResolved(r: BugReport, resolved: boolean) {
     setBusyId(r.id)
+    setError(null)
     try {
       const res = await apiFetch(`/api/bug-reports/${r.id}`, {
         method: "PATCH",
@@ -55,19 +76,58 @@ export default function AdminBugsPage() {
         setReports((prev) => prev.map((x) =>
           x.id === r.id ? { ...x, resolved, resolved_at: resolved ? new Date().toISOString() : null } : x
         ))
+      } else if (res.status === 404) {
+        setReports((prev) => prev.filter((x) => x.id !== r.id))
+        setError("Diese Meldung existierte nicht mehr und wurde aus der Liste entfernt.")
+      } else {
+        setError("Speichern fehlgeschlagen. Bitte Seite neu laden.")
       }
-    } catch {}
+    } catch {
+      setError("Speichern fehlgeschlagen. Bitte Seite neu laden.")
+    }
     setBusyId(null)
   }
 
   async function remove(r: BugReport) {
-    if (!confirm("Diese Bug-Meldung wirklich löschen?")) return
+    if (!confirm("Diese Bug-Meldung inklusive aller Bilder wirklich löschen?")) return
     setBusyId(r.id)
+    setError(null)
     try {
       const res = await apiFetch(`/api/bug-reports/${r.id}`, { method: "DELETE" })
-      if (res.ok) setReports((prev) => prev.filter((x) => x.id !== r.id))
-    } catch {}
+      if (res.ok || res.status === 404) {
+        setReports((prev) => prev.filter((x) => x.id !== r.id))
+      } else {
+        setError("Löschen fehlgeschlagen. Bitte Seite neu laden.")
+      }
+    } catch {
+      setError("Löschen fehlgeschlagen. Bitte Seite neu laden.")
+    }
     setBusyId(null)
+  }
+
+  async function toggleImages(r: BugReport) {
+    if (openImages === r.id) {
+      setOpenImages(null)
+      return
+    }
+    setOpenImages(r.id)
+    if (images[r.id]?.items.length) return
+
+    setImages((prev) => ({ ...prev, [r.id]: { loading: true, items: [] } }))
+    try {
+      const res = await apiFetch(`/api/bug-reports/${r.id}/images`)
+      const data = res.ok ? await res.json() : null
+      setImages((prev) => ({
+        ...prev,
+        [r.id]: {
+          loading: false,
+          items: Array.isArray(data?.images) ? data.images : [],
+          error: res.ok ? undefined : "Bilder konnten nicht geladen werden.",
+        },
+      }))
+    } catch {
+      setImages((prev) => ({ ...prev, [r.id]: { loading: false, items: [], error: "Bilder konnten nicht geladen werden." } }))
+    }
   }
 
   const chips: { key: Filter; label: string; count: number }[] = [
@@ -79,10 +139,28 @@ export default function AdminBugsPage() {
   return (
     <div>
       <div className="mb-6">
-        <div className="kicker mb-2">Admin-Dashboard · {counts.open} offen · {counts.all} gesamt</div>
-        <h1 className="font-display font-bold text-3xl" style={{ color: "var(--text-primary)" }}>Bug-Meldungen</h1>
-        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>Meldungen aus dem /bug-Befehl — nur für den Owner sichtbar.</p>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <div className="kicker mb-2">Admin-Dashboard · {counts.open} offen · {counts.all} gesamt</div>
+            <h1 className="font-display font-bold text-3xl" style={{ color: "var(--text-primary)" }}>Bug-Meldungen</h1>
+            <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>Meldungen aus dem /bug-Befehl — nur für den Owner sichtbar.</p>
+          </div>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="font-mono text-xs px-4 py-2 rounded-lg border transition-colors disabled:opacity-40"
+            style={{ borderColor: "var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-muted)" }}
+          >
+            ↻ Aktualisieren
+          </button>
+        </div>
       </div>
+
+      {error && (
+        <div className="card mb-4 !p-4" style={{ borderColor: "var(--red)" }}>
+          <p className="text-xs" style={{ color: "var(--red)" }}>{error}</p>
+        </div>
+      )}
 
       <div className="card mb-4 !p-4">
         <div className="flex gap-2 flex-wrap">
@@ -133,6 +211,55 @@ export default function AdminBugsPage() {
                 </span>
               </div>
               <p className="text-sm whitespace-pre-wrap mb-3" style={{ color: "var(--text-primary)" }}>{r.text}</p>
+              {r.image_count > 0 && (
+                <div className="mb-3">
+                  <button
+                    onClick={() => { void toggleImages(r) }}
+                    className="badge-neutral text-[11px] hover:opacity-80"
+                  >
+                    📎 {r.image_count} {r.image_count === 1 ? "Bild" : "Bilder"} {openImages === r.id ? "ausblenden" : "anzeigen"}
+                  </button>
+                  {openImages === r.id && (
+                    <div className="mt-3">
+                      {images[r.id]?.loading ? (
+                        <div className="skeleton h-24 w-36" />
+                      ) : images[r.id]?.error ? (
+                        <p className="text-xs" style={{ color: "var(--red)" }}>{images[r.id].error}</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {(images[r.id]?.items ?? []).map((img) => (
+                            img.url ? (
+                              <a
+                                key={img.id}
+                                href={img.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={`${img.mime} · ${Math.max(1, Math.round(img.size_bytes / 1024))} KB`}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={img.url}
+                                  alt={`Screenshot ${img.id}`}
+                                  className="h-24 w-36 object-cover rounded-lg border transition-opacity hover:opacity-90"
+                                  style={{ borderColor: "var(--border)" }}
+                                />
+                              </a>
+                            ) : (
+                              <div
+                                key={img.id}
+                                className="h-24 w-36 rounded-lg border flex items-center justify-center text-[10px] font-mono"
+                                style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+                              >
+                                nicht verfügbar
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>
                   MC {r.mc_version} · Mod {r.mod_version} · {r.loader}
