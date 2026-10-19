@@ -33,6 +33,11 @@ Legend: `(admin)` needs OP level (default 2, see `adminOpLevel`) or the `statusm
 ## Bugs
 
 - `/bug <text>` — report a bug; requires the server to be connected to a dashboard (the report lands in the server team's dashboard)
+- Optional screenshots (max 3 per report): click `[Im Spiel anhängen]` with the client mod installed to pick one of your Minecraft screenshots, or `[Im Browser öffnen]` to upload from any browser (also works for vanilla clients and Bedrock). Images are downsized and re-encoded before upload; the mod shrinks them to max 1920 px / JPEG.
+
+## Controls
+
+- `U` (default) — opens the `/status` menu. Rebind in Options → Controls → Key Binds → **StatusMod**. Only active when the mod is installed on the client.
 
 ## Admin
 

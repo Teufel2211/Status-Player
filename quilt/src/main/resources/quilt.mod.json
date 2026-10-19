@@ -17,6 +17,9 @@
     "entrypoints": {
       "main": [
         "com.teufel.statusmod.fabric.StatusModFabric"
+      ],
+      "client": [
+        "com.teufel.statusmod.fabric.StatusModFabricClient"
       ]
     },
     "intermediate_mappings": "net.fabricmc:intermediary",

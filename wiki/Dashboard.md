@@ -22,6 +22,7 @@ The optional web dashboard connects your server(s) for live sync, player managem
 - **Config** — edit server JSON (validated on save).
 - **API Keys** — create/revoke mod keys (owner only, max 2 active).
 - **Audit Log** — who changed what, when.
+- **Bug reports** — inbox for `/bug` messages (owner-only), including attached screenshots; mark as done or delete (deleting a report also removes its images).
 
 Sessions persist via HttpOnly cookie (7 days, silent refresh). The dashboard never sees your Minecraft password — login is always a one-time code.
 

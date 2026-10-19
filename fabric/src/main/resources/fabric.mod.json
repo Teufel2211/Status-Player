@@ -11,6 +11,9 @@
   "entrypoints": {
     "main": [
       "com.teufel.statusmod.fabric.StatusModFabric"
+    ],
+    "client": [
+      "com.teufel.statusmod.fabric.StatusModFabricClient"
     ]
   },
   "depends": {

@@ -10,17 +10,23 @@ import com.teufel.statusmod.command.SettingsCommand;
 import com.teufel.statusmod.command.StatusCommand;
 import com.teufel.statusmod.lifecycle.StatusLifecycle;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.listener.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 
 @Mod(StatusMod.MOD_ID)
 public final class StatusModForge {
     public StatusModForge() {
         StatusMod.init();
+        // Client-Klassen dürfen auf Dedicated Servern nie geladen werden.
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            StatusModForgeClient.init();
+        }
         MinecraftForge.EVENT_BUS.register(this);
     }
 

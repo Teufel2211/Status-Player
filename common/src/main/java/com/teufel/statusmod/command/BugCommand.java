@@ -1,17 +1,21 @@
 package com.teufel.statusmod.command;
 
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.teufel.statusmod.StatusMod;
 import com.teufel.statusmod.platform.PlatformServices;
 import com.teufel.statusmod.storage.ModConfig;
+import com.teufel.statusmod.util.ChatLinks;
 import com.teufel.statusmod.util.CodeGenerator;
 import com.teufel.statusmod.util.CommandUtil;
+import net.minecraft.ChatFormatting;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -55,6 +59,34 @@ public final class BugCommand {
                             handleReport(ctx.getSource(), StringArgumentType.getString(ctx, "text"));
                             return 1;
                         })));
+
+        // Vanilla-Clients, die den Chat-Button "[Im Spiel anhängen]" klicken,
+        // landen hier. Mit Client-Mod wird der Befehl lokal abgefangen.
+        dispatcher.register(Commands.literal("bugbild")
+                .executes(ctx -> {
+                    sendImageHint(ctx.getSource());
+                    return 1;
+                })
+                .then(Commands.argument("args", StringArgumentType.greedyString())
+                        .executes(ctx -> {
+                            sendImageHint(ctx.getSource());
+                            return 1;
+                        })));
+    }
+
+    private static void sendImageHint(CommandSourceStack src) {
+        try {
+            ModConfig config = StatusMod.getConfig();
+            if (config != null && !config.isEnabled("bug")) {
+                src.sendFailure(Component.literal("Bug-Meldungen sind auf diesem Server deaktiviert."));
+                return;
+            }
+            CommandUtil.sendSuccess(src, Component.literal(
+                    "Bilder im Spiel anhängen geht nur mit der StatusMod auf deinem Client. "
+                            + "Nutze sonst den Browser-Link aus deiner /bug-Meldung."), false);
+        } catch (Exception ignored) {
+            // Kein Fehler nach außen - der Hinweis ist best effort.
+        }
     }
 
     private static void handleReport(CommandSourceStack src, String rawText) {
@@ -108,8 +140,8 @@ public final class BugCommand {
             CommandUtil.sendSuccess(src, Component.literal("Bug-Meldung wird gesendet..."), false);
 
             Thread thread = new Thread(() -> {
-                int status = send(baseUrl, apiKey, serverId, playerUuid, playerName, reportText);
-                server.execute(() -> deliver(player, status));
+                SendResult result = send(baseUrl, apiKey, serverId, playerUuid, playerName, reportText);
+                server.execute(() -> deliver(player, result));
             }, "statusmod-bug");
             thread.setDaemon(true);
             thread.start();
@@ -119,14 +151,18 @@ public final class BugCommand {
         }
     }
 
-    private static void deliver(ServerPlayer player, int status) {
+    private static void deliver(ServerPlayer player, SendResult result) {
         try {
             if (player.isRemoved()) return;
+            int status = result.status;
             if (status >= 200 && status < 300) {
                 synchronized (lastReportAt) {
                     lastReportAt.put(player.getUUID(), System.currentTimeMillis());
                 }
                 player.sendSystemMessage(Component.literal("§aDanke! Deine Bug-Meldung ist angekommen."));
+                if (result.upload != null && result.upload.isValid()) {
+                    player.sendSystemMessage(buildUploadLine(result.upload));
+                }
             } else if (status == 401 || status == 403) {
                 player.sendSystemMessage(Component.literal("§cBug-Meldung fehlgeschlagen (Auth-Fehler). Prüfe den apiKey in config/statusmod/config.json."));
             } else if (status == 429) {
@@ -141,7 +177,21 @@ public final class BugCommand {
         } catch (Exception ignored) {}
     }
 
-    private static int send(String dashboardUrl, String apiKey, String serverId, String playerUuid, String playerName, String text) {
+    /** Zweite Chat-Zeile nach Erfolg: Browser-Link, In-Game-Liste und Kopier-Code. */
+    private static Component buildUploadLine(UploadInfo upload) {
+        MutableComponent line = Component.literal("Screenshots anhängen: ").withStyle(ChatFormatting.GRAY);
+        line.append(ChatLinks.openUrl("[Im Browser öffnen]", upload.pageUrl, ChatFormatting.AQUA,
+                "Browser öffnen und Bilder hochladen"));
+        line.append(Component.literal("  ").withStyle(ChatFormatting.DARK_GRAY));
+        line.append(ChatLinks.runCommand("[Im Spiel anhängen]", "/bugbild " + upload.apiUrl, ChatFormatting.AQUA,
+                "Zeigt deine neuesten Screenshots (nur mit StatusMod auf dem Client)"));
+        line.append(Component.literal("  Code: ").withStyle(ChatFormatting.DARK_GRAY));
+        line.append(ChatLinks.copyToClipboard(upload.code, upload.code, ChatFormatting.YELLOW, "Code kopieren"));
+        line.append(Component.literal(" (30 Min gültig)").withStyle(ChatFormatting.DARK_GRAY));
+        return line;
+    }
+
+    private static SendResult send(String dashboardUrl, String apiKey, String serverId, String playerUuid, String playerName, String text) {
         try {
             JsonObject payload = new JsonObject();
             payload.addProperty("server_id", serverId);
@@ -160,10 +210,62 @@ public final class BugCommand {
                     .POST(HttpRequest.BodyPublishers.ofString(payload.toString()))
                     .build();
 
-            HttpResponse<Void> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.discarding());
-            return response.statusCode();
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            int status = response.statusCode();
+            if (status < 200 || status >= 300) {
+                return new SendResult(status, null);
+            }
+
+            UploadInfo upload = null;
+            try {
+                JsonObject root = JsonParser.parseString(response.body()).getAsJsonObject();
+                if (root.has("upload") && root.get("upload").isJsonObject()) {
+                    JsonObject obj = root.getAsJsonObject("upload");
+                    upload = new UploadInfo(
+                            optString(obj, "code"),
+                            optString(obj, "page_url"),
+                            optString(obj, "api_url"));
+                }
+            } catch (Exception ignored) {
+                // Ältere Dashboard-Versionen liefern kein upload-Objekt.
+            }
+            return new SendResult(status, upload);
         } catch (Exception e) {
-            return -1;
+            return new SendResult(-1, null);
+        }
+    }
+
+    private static String optString(JsonObject obj, String key) {
+        try {
+            return obj.has(key) && !obj.get(key).isJsonNull() ? obj.get(key).getAsString() : "";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static final class UploadInfo {
+        final String code;
+        final String pageUrl;
+        final String apiUrl;
+
+        UploadInfo(String code, String pageUrl, String apiUrl) {
+            this.code = code == null ? "" : code;
+            this.pageUrl = pageUrl == null ? "" : pageUrl;
+            this.apiUrl = apiUrl == null ? "" : apiUrl;
+        }
+
+        boolean isValid() {
+            return !code.isEmpty() && !pageUrl.isEmpty() && !apiUrl.isEmpty();
+        }
+    }
+
+    private static final class SendResult {
+        final int status;
+        final UploadInfo upload;
+
+        SendResult(int status, UploadInfo upload) {
+            this.status = status;
+            this.upload = upload;
         }
     }
 

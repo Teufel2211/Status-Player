@@ -2,7 +2,7 @@
 
 StatusMod adds lightweight status tags for players on Minecraft servers and clients.
 
-Current version: **1.4.0** (see [CHANGELOG](../CHANGELOG.md)).
+Current version: **1.4.1** (see [CHANGELOG](../CHANGELOG.md)).
 
 Supported loaders and Minecraft versions:
 
@@ -33,5 +33,6 @@ That's 24 JARs: 4 loaders × 6 versions.
 - Players set a custom status + color (`/status`), shown in tab list, names, boss bar/sidebar.
 - Beginner GUI: bare `/status` opens a preset menu; `/status gui` (admin) shows player heads.
 - Optional web dashboard (opt-in): live two-way sync, player management, API keys.
+- Optional client extra: keybind `U` opens the `/status` menu (rebindable); `/bug` can attach up to 3 screenshots (in-game picker or browser link).
 - Status data is stored locally in `config/statusmod/` (JSON, works without dashboard).
 - AI disclosure: development is AI-assisted (see Modrinth project page).

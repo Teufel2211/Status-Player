@@ -186,8 +186,11 @@ ALLOW_HTTP=false
 | `/api/audit/:server_id` | GET | API-Key | audit | Audit-Log |
 | `/api/server/:server_id/config` | GET | API-Key | check | Config lesen |
 | `/api/server/:server_id/config` | PUT | Session | – | Config schreiben |
-| `/api/bug-report` | POST | API-Key | check | Ingame-Bugmeldung → Dashboard-Posteingang |
-| `/api/bug-reports/:server_id` | GET | Session | – | Bug-Meldungen (neueste zuerst) |
+| `/api/bug-report` | POST | API-Key | check | Ingame-Bugmeldung → Dashboard-Posteingang; Antwort enthält Upload-Code (30 Min) für Bilder |
+| `/api/bug-report/image?c=` | GET | – | – | Status des Upload-Codes (gültig, abgelaufen, belegte Plätze) |
+| `/api/bug-report/image?c=` | POST | – | – | Screenshot-Upload (Roh-Body, PNG/JPEG/WebP, max. 3 MB, max. 3 pro Meldung) |
+| `/api/bug-reports/:server_id` | GET | Session | – | Bug-Meldungen (neueste zuerst, inkl. Bild-Anzahl) |
+| `/api/bug-reports/:server_id/:id/images` | GET | Session | – | Signierte Bild-URLs einer Meldung (5 Min gültig, owner-only) |
 | `/api/bug-reports/:server_id/:id` | PATCH | Session | – | Meldung offen/erledigt setzen |
 | `/api/bug-reports/:server_id/:id` | DELETE | Session | – | Meldung löschen |
 

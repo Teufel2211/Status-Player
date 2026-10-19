@@ -5,6 +5,8 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 - New `/bug <text>` command: report bugs right from the game. The report (player name, server, mod/MC version, loader) lands in the dashboard inbox of the server team. Needs a dashboard-connected server; can be toggled with `/status feature bug`.
+- `/bug` now accepts up to 3 screenshots per report: attach them in-game (screenshot picker) or upload them in the browser via the link in chat (works for vanilla clients and Bedrock players too). Images show up as thumbnails in the dashboard inbox.
+- New keybind (default `U`) opens the `/status` menu. Rebindable under Options → Controls → Key Binds → StatusMod.
 
 ## 1.4.1 - 2026-10-15
 
