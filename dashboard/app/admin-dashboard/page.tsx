@@ -475,6 +475,7 @@ export default function AdminOverviewPage() {
                         <span
                           className="absolute top-1/2 rounded-full bg-white transition-transform"
                           style={{
+                            left: 0,
                             width: 16,
                             height: 16,
                             marginTop: -8,
