@@ -31,8 +31,9 @@ That's 24 JARs: 4 loaders × 6 versions.
 ## Quick Summary
 
 - Players set a custom status + color (`/status`), shown in tab list, names, boss bar/sidebar.
+- Timed statuses (`/status Bauen 2h`) return automatically; per-player chat slowmode and temporary ignores are managed in the dashboard.
 - Beginner GUI: bare `/status` opens a preset menu; `/status gui` (admin) shows player heads.
-- Optional web dashboard (opt-in): live two-way sync, player management, API keys.
+- Optional web dashboard (opt-in): live two-way sync, player management, warnings, server presets, API keys.
 - Optional client extra: keybind `U` opens the `/status` menu (rebindable); `/bug` can attach up to 3 screenshots (in-game picker or browser link).
 - Status data is stored locally in `config/statusmod/` (JSON, works without dashboard).
 - AI disclosure: development is AI-assisted (see Modrinth project page).

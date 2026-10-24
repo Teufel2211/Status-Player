@@ -64,6 +64,14 @@ export function describeAudit(entry: AuditLike): string {
       return "Verteilung aktualisiert"
     case "fleet_config_rollback":
       return "Verteilung zurückgesetzt"
+    case "mod_disable":
+      return "StatusMod für diesen Server deaktiviert"
+    case "mod_enable":
+      return "StatusMod für diesen Server aktiviert"
+    case "mod_global_disable":
+      return "StatusMod auf allen Servern deaktiviert"
+    case "mod_global_enable":
+      return "StatusMod global aktiviert"
     case "config_update":
       return "Server-Config geändert"
     default:

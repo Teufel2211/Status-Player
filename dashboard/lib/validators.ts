@@ -44,6 +44,10 @@ export const FleetConfigSchema = z.object({
   restore_id: z.number().int().positive().optional(),
 })
 
+export const ModKillSwitchSchema = z.object({
+  mod_enabled: z.boolean(),
+})
+
 export const BugReportSchema = z.object({
   server_id: z.string().regex(uuidRegex),
   // Nur für den Rate-Limit-Schlüssel - wird nicht gespeichert.

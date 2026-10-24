@@ -5,7 +5,10 @@ import com.teufel.statusmod.storage.BlockedPlayers;
 import com.teufel.statusmod.storage.CustomPresets;
 import com.teufel.statusmod.storage.ModConfig;
 import com.teufel.statusmod.storage.MutedPlayers;
+import com.teufel.statusmod.storage.ServerPresets;
 import com.teufel.statusmod.storage.SettingsStorage;
+import com.teufel.statusmod.storage.SlowmodeStore;
+import com.teufel.statusmod.storage.WarningStore;
 import com.teufel.statusmod.platform.Platform;
 import com.teufel.statusmod.platform.PlatformServices;
 import com.teufel.statusmod.setup.SetupManager;
@@ -16,15 +19,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class StatusMod {
     public static final String MOD_ID = "statusmod";
     /** Bump on every GUI-fix round so running builds are identifiable via log + /status version. */
-    public static final String BUILD = "bugimg2";
+    public static final String BUILD = "1.4.2-dev3";
     /** Mod version for user-facing output + /bug reports. Bump together with version.txt at release prep. */
-    public static final String VERSION = "1.4.1";
+    public static final String VERSION = "1.4.2";
     private static final AtomicBoolean initialized = new AtomicBoolean(false);
+    /** Vom Dashboard gesteuerter Kill-Switch (siehe SyncManager.pull). */
+    private static volatile boolean remoteDisabled = false;
     public static volatile ModConfig config;
     public static volatile SettingsStorage storage;
     public static volatile BlockedPlayers blockedPlayers;
     public static volatile MutedPlayers mutedPlayers;
     public static volatile CustomPresets customPresets;
+    public static volatile ServerPresets serverPresets;
+    public static volatile SlowmodeStore slowmodeStore;
+    public static volatile WarningStore warningStore;
 
     private StatusMod() {}
 
@@ -35,10 +43,14 @@ public final class StatusMod {
 
         Platform platform = PlatformServices.getPlatform();
         config = ModConfig.load();
+        remoteDisabled = config.remoteDisabled;
         storage = new SettingsStorage();
         blockedPlayers = new BlockedPlayers();
         mutedPlayers = new MutedPlayers();
         customPresets = new CustomPresets();
+        serverPresets = new ServerPresets();
+        slowmodeStore = new SlowmodeStore();
+        warningStore = new WarningStore();
         AuditLogger.init();
 
         System.out.println("[StatusMod] Initializing on " + platform.getName() + " (build " + BUILD + ")");
@@ -56,6 +68,25 @@ public final class StatusMod {
         return config;
     }
 
+    /** True wenn der Fleet-Owner StatusMod fuer diesen Server deaktiviert hat. */
+    public static boolean isRemoteDisabled() {
+        return remoteDisabled;
+    }
+
+    /**
+     * Setzt den Kill-Switch-Zustand und persistiert ihn in config.json.
+     * Der Aufruf kommt aus dem Sync-Thread; config.save() ist atomar.
+     */
+    public static void setRemoteDisabled(boolean disabled) {
+        if (remoteDisabled == disabled) return;
+        remoteDisabled = disabled;
+        ModConfig cfg = config;
+        if (cfg != null) {
+            cfg.remoteDisabled = disabled;
+            cfg.save();
+        }
+    }
+
     public static SettingsStorage getStorage() {
         return storage;
     }
@@ -70,5 +101,17 @@ public final class StatusMod {
 
     public static CustomPresets getCustomPresets() {
         return customPresets;
+    }
+
+    public static ServerPresets getServerPresets() {
+        return serverPresets;
+    }
+
+    public static SlowmodeStore getSlowmodeStore() {
+        return slowmodeStore;
+    }
+
+    public static WarningStore getWarningStore() {
+        return warningStore;
     }
 }

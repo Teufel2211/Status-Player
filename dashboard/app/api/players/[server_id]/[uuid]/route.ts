@@ -25,7 +25,37 @@ export async function GET(
     .maybeSingle()
 
   if (error) return serverError()
-  return ok(data ?? null)
+
+  if (!data) return ok(null)
+
+  const sb2 = getServiceClient()
+  const [warnRes, ignoreRes] = await Promise.all([
+    (sb2 as any)
+      .from("player_warnings")
+      .select("id, reason, created_at, expires_at")
+      .eq("server_id", params.server_id)
+      .eq("player_uuid", params.uuid)
+      .is("revoked_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false }),
+    (sb2 as any)
+      .from("blocked_players")
+      .select("uuid, blocked_at, expires_at")
+      .eq("server_id", params.server_id)
+      .eq("uuid", params.uuid)
+      .maybeSingle(),
+  ])
+
+  const ignore = ignoreRes.data ?? null
+  const ignoreActive = ignore
+    ? (ignore.expires_at == null || new Date(ignore.expires_at).getTime() > Date.now())
+    : false
+
+  return ok({
+    ...data,
+    warnings: warnRes.data ?? [],
+    ignore: ignoreActive ? ignore : null,
+  })
 }
 
 export async function PUT(
@@ -58,7 +88,10 @@ export async function PUT(
   if (findError) return serverError()
 
   const updateData: Record<string, unknown> = {}
-  if (parsed.data.status !== undefined) updateData.status = parsed.data.status
+  if (parsed.data.status !== undefined) {
+    updateData.status = parsed.data.status
+    updateData.status_expires_at = null
+  }
   if (parsed.data.color !== undefined) updateData.color = parsed.data.color
   // updated_at pflegen, sonst verpasst der Mod-Pull (updated_at >= since) PUT-Edits.
   updateData.updated_at = new Date().toISOString()
@@ -115,6 +148,8 @@ export async function DELETE(
       avatar: null,
       is_online: false,
       last_seen: null,
+      status_expires_at: null,
+      slowmode_seconds: 0,
       uuid: anonymizedUuid,
     })
     .eq("server_id", params.server_id)
@@ -125,6 +160,7 @@ export async function DELETE(
   await Promise.all([
     (sb as any).from("blocked_players").delete().eq("server_id", params.server_id).eq("uuid", params.uuid),
     (sb as any).from("muted_players").delete().eq("server_id", params.server_id).eq("uuid", params.uuid),
+    (sb as any).from("player_warnings").delete().eq("server_id", params.server_id).eq("player_uuid", params.uuid),
   ])
 
   return ok({ success: true, message: "Data anonymized. Full deletion in 24h." })

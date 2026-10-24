@@ -28,7 +28,12 @@ export async function PATCH(
 
   const sb = getServiceClient()
   const updateData: Record<string, unknown> = {}
-  if (parsed.data.status !== undefined) updateData.status = parsed.data.status
+  if (parsed.data.status !== undefined) {
+    updateData.status = parsed.data.status
+    // Dashboard-Edit beendet einen laufenden Timed-Status (der Mod raeumt
+    // beim Pull ebenfalls Ablaufzeit + Stash).
+    updateData.status_expires_at = null
+  }
   if (parsed.data.color !== undefined) updateData.color = parsed.data.color
 
   const { data: existing, error: findError } = await (sb as any)

@@ -16,6 +16,7 @@ type FleetServer = {
   created_at: string | null
   known: number | null
   online: number | null
+  mod_enabled: boolean
 }
 
 type ApiKeyRow = {
@@ -69,6 +70,9 @@ export default function AdminOverviewPage() {
   const [history, setHistory] = useState<HistoryRow[]>([])
   const [restoreId, setRestoreId] = useState<number | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [globalModEnabled, setGlobalModEnabled] = useState(true)
+  const [bulkModBusy, setBulkModBusy] = useState(false)
+  const [modBusyId, setModBusyId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -84,7 +88,16 @@ export default function AdminOverviewPage() {
     tasks.push(
       apiFetch("/api/servers")
         .then((r) => (r.ok ? r.json() : []))
-        .then((d) => setServers(Array.isArray(d) ? d : []))
+        .then((d) => {
+          if (Array.isArray(d)) {
+            // Alte API-Form (vor dem Kill-Switch): alles aktiv.
+            setServers(d)
+            setGlobalModEnabled(true)
+          } else {
+            setServers(Array.isArray(d?.servers) ? d.servers : [])
+            setGlobalModEnabled(d?.global_mod_enabled !== false)
+          }
+        })
         .catch(() => {})
     )
     tasks.push(
@@ -132,6 +145,10 @@ export default function AdminOverviewPage() {
     e.preventDefault()
     const sid = getServerId()
     if (!sid || !presetName.trim() || !presetStatus.trim()) return
+    if (/\s/.test(presetName.trim())) {
+      setPresetMsg("Der Preset-Name darf keine Leerzeichen enthalten.")
+      return
+    }
     setPresetBusy(true)
     setPresetMsg("")
     try {
@@ -151,7 +168,8 @@ export default function AdminOverviewPage() {
         setPresetMsg("Preset gespeichert.")
         await load()
       } else {
-        setPresetMsg("Speichern fehlgeschlagen.")
+        const d = await r.json().catch(() => null)
+        setPresetMsg(d?.error ?? "Speichern fehlgeschlagen.")
       }
     } catch {
       setPresetMsg("Netzwerkfehler.")
@@ -166,6 +184,40 @@ export default function AdminOverviewPage() {
       const r = await apiFetch(`/api/presets/${sid}/${encodeURIComponent(name)}`, { method: "DELETE" })
       if (r.ok) await load()
     } catch {}
+  }
+
+  async function toggleGlobalMod() {
+    const next = !globalModEnabled
+    if (!next && !window.confirm(
+      "StatusMod auf allen Servern deaktivieren? Status-Anzeige, Befehle und Sync werden sofort gestoppt (greift nach max. 15 s)."
+    )) return
+    setBulkModBusy(true)
+    try {
+      const r = await apiFetch("/api/admin/servers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mod_enabled: next }),
+      })
+      if (r.ok) await load()
+    } catch {}
+    setBulkModBusy(false)
+  }
+
+  async function toggleServerMod(s: FleetServer) {
+    const next = s.mod_enabled === false
+    if (!next && !window.confirm(
+      `StatusMod auf Server ${s.id.slice(0, 8)} deaktivieren? Status-Anzeige, Befehle und Sync werden sofort gestoppt (greift nach max. 15 s).`
+    )) return
+    setModBusyId(s.id)
+    try {
+      const r = await apiFetch(`/api/admin/servers/${s.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mod_enabled: next }),
+      })
+      if (r.ok) await load()
+    } catch {}
+    setModBusyId(null)
   }
 
   async function saveFleet(e: React.FormEvent) {
@@ -325,7 +377,11 @@ export default function AdminOverviewPage() {
       </div>
 
       <div className="mb-8">
-        <SectionHead kicker="Flotte" title="Alle Server" sub="Jeder Server meldet sich automatisch beim ersten Setup." />
+        <SectionHead
+          kicker="Flotte"
+          title="Alle Server"
+          sub="Jeder Server meldet sich automatisch beim ersten Setup. StatusMod lässt sich pro Server oder global stilllegen."
+        />
         {loading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[0, 1, 2].map((i) => <div key={i} className="skeleton h-28" />)}
@@ -335,30 +391,103 @@ export default function AdminOverviewPage() {
             <p className="text-sm" style={{ color: "var(--text-muted)" }}>Noch kein Server registriert</p>
           </div>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {servers.map((s) => (
-              <div key={s.id} className="card !p-5">
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <span className="font-display font-semibold" style={{ color: "var(--text-primary)" }}>{s.id.slice(0, 8)}</span>
-                  <button
-                    onClick={() => copyId(s.id)}
-                    className="font-mono text-[11px] px-2.5 py-1 rounded-lg transition-colors"
-                    style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-primary)", color: "var(--text-muted)" }}
-                  >
-                    {copiedId === s.id ? "kopiert" : "ID kopieren"}
-                  </button>
+          <>
+            <div
+              className="card !p-4 mb-4 flex items-center justify-between gap-4 flex-wrap"
+              style={{ borderColor: globalModEnabled ? "var(--border)" : "var(--red-line)" }}
+            >
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-display font-semibold text-sm" style={{ color: "var(--text-primary)" }}>StatusMod global</span>
+                  {globalModEnabled
+                    ? <span className="badge-green text-[10px]">Aktiv</span>
+                    : <span className="badge-red text-[10px]">Alle Server aus</span>}
                 </div>
-                <div className="flex items-center gap-2 text-xs font-mono" style={{ color: "var(--text-muted)" }}>
-                  {(s.online ?? 0) > 0 && <span className="pulse-dot" />}
-                  <span>
-                    {s.online ?? "—"} online · {s.known ?? "—"} bekannt
-                    {s.created_at ? ` · seit ${new Date(s.created_at).toLocaleDateString()}` : ""}
-                  </span>
-                </div>
-                <p className="text-[10px] font-mono mt-2 break-all" style={{ color: "var(--text-muted)" }}>{s.id}</p>
+                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                  {globalModEnabled
+                    ? "Die Schalter der einzelnen Server gelten."
+                    : "Übersteuert alle Server. Einzelne Schalter bleiben gespeichert."}
+                </p>
               </div>
-            ))}
-          </div>
+              <button
+                type="button"
+                onClick={toggleGlobalMod}
+                disabled={bulkModBusy}
+                className={globalModEnabled ? "btn-danger text-xs px-4 py-2" : "btn-primary text-xs px-4 py-2"}
+              >
+                {bulkModBusy ? "Speichert…" : globalModEnabled ? "Alle deaktivieren" : "Global aktivieren"}
+              </button>
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {servers.map((s) => {
+                const effective = globalModEnabled && s.mod_enabled !== false
+                return (
+                  <div
+                    key={s.id}
+                    className="card !p-5"
+                    style={{ borderColor: effective ? "var(--border)" : "var(--red-line)" }}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <span className="font-display font-semibold" style={{ color: "var(--text-primary)" }}>{s.id.slice(0, 8)}</span>
+                      <button
+                        onClick={() => copyId(s.id)}
+                        className="font-mono text-[11px] px-2.5 py-1 rounded-lg transition-colors"
+                        style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-primary)", color: "var(--text-muted)" }}
+                      >
+                        {copiedId === s.id ? "kopiert" : "ID kopieren"}
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+                      {(s.online ?? 0) > 0 && <span className="pulse-dot" />}
+                      <span>
+                        {s.online ?? "—"} online · {s.known ?? "—"} bekannt
+                        {s.created_at ? ` · seit ${new Date(s.created_at).toLocaleDateString()}` : ""}
+                      </span>
+                    </div>
+                    <p className="text-[10px] font-mono mt-2 break-all" style={{ color: "var(--text-muted)" }}>{s.id}</p>
+
+                    <div className="flex items-center justify-between gap-3 mt-4 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>StatusMod</span>
+                          {effective
+                            ? <span className="badge-green text-[10px]">Aktiv</span>
+                            : <span className="badge-red text-[10px]">{globalModEnabled ? "Deaktiviert" : "Global aus"}</span>}
+                        </div>
+                        <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Greift nach max. 15 s</p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={s.mod_enabled !== false}
+                        aria-label={`StatusMod auf Server ${s.id.slice(0, 8)} ${s.mod_enabled === false ? "aktivieren" : "deaktivieren"}`}
+                        disabled={!globalModEnabled || bulkModBusy || modBusyId === s.id}
+                        onClick={() => toggleServerMod(s)}
+                        className="relative shrink-0 rounded-full transition-colors disabled:opacity-40"
+                        style={{
+                          width: 38,
+                          height: 22,
+                          backgroundColor: s.mod_enabled !== false ? "var(--accent)" : "var(--bg-hover)",
+                          border: `1px solid ${s.mod_enabled !== false ? "var(--accent)" : "var(--border)"}`,
+                        }}
+                      >
+                        <span
+                          className="absolute top-1/2 rounded-full bg-white transition-transform"
+                          style={{
+                            width: 16,
+                            height: 16,
+                            marginTop: -8,
+                            transform: s.mod_enabled !== false ? "translateX(19px)" : "translateX(3px)",
+                          }}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </>
         )}
       </div>
 

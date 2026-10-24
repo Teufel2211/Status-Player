@@ -100,6 +100,10 @@ public final class StatusLifecycle {
             }
             ModConfig cfg = StatusMod.getConfig();
             if (cfg == null) return;
+            // Kill-Switch: keine Status-Wiederherstellung, solange der Server
+            // im Admin-Dashboard deaktiviert ist. Name/Activity oben bleiben
+            // gepflegt, damit ein Re-Enable sofort korrekt rendert.
+            if (StatusMod.isRemoteDisabled()) return;
             if (!cfg.restoreStatusOnJoin) {
                 settings.status = "";
                 settings.color = "reset";
@@ -111,7 +115,12 @@ public final class StatusLifecycle {
             }
             if (!cfg.restoreTimedOnJoin) {
                 settings.statusExpiresAtMs = 0L;
+                settings.timedPrevStatus = "";
+                settings.timedPrevColor = "reset";
+            } else {
+                restoreExpiredTimedStatus(player, settings, uuid, false);
             }
+            restoreExpiredBlocks(server);
             if (settings.status.isEmpty()) {
                 settings.autoAfk = false;
             }
@@ -134,8 +143,38 @@ public final class StatusLifecycle {
         }
     }
 
+    /**
+     * Wird vom Sync-Thread auf dem Server-Thread ausgefuehrt, wenn der
+     * Fleet-Owner den Kill-Switch umlegt. Deaktiviert: alle Status-Teams
+     * entfernen, Bossbar/Sidebar ausblenden. Aktiviert: Status sofort neu
+     * rendern, ohne auf den naechsten Reapply-Tick zu warten.
+     */
+    public static void onRemoteStateChanged(MinecraftServer server, boolean enabled) {
+        if (server == null || StatusMod.storage == null) return;
+        try {
+            if (!enabled) {
+                for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                    StatusTeamUtil.clearStatus(server.getScoreboard(), player);
+                }
+                com.teufel.statusmod.display.StatusBossBar.hide();
+                com.teufel.statusmod.display.StatusSidebar.hide(server);
+                return;
+            }
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                PlayerSettings settings = StatusMod.storage.forPlayer(player.getUUID().toString());
+                String status = StatusTextUtil.resolveStatusForPlayer(settings, player);
+                String color = StatusTextUtil.resolveColorForPlayer(settings, player);
+                StatusTeamUtil.applyStatus(server.getScoreboard(), player, settings, status, color,
+                    PermissionUtil.hasAdminPermission(player));
+            }
+        } catch (Throwable e) {
+            System.err.println("[StatusMod] Failed to apply remote kill switch: " + e.getMessage());
+        }
+    }
+
     public static void markActive(ServerPlayer player) {
         if (player == null || StatusMod.storage == null) return;
+        if (StatusMod.isRemoteDisabled()) return;
         String uuid = player.getUUID().toString();
         PlayerSettings settings = StatusMod.storage.forPlayer(uuid);
         settings.lastActivityAtMs = System.currentTimeMillis();
@@ -169,6 +208,10 @@ public final class StatusLifecycle {
         tickCounter++;
 
         SyncManager.updateOnlineNames(server);
+
+        // Kill-Switch: nur die Online-Namen aktuell halten (fuer den Sync-
+        // Thread), aber keinerlei Status-/AFK-/Anzeige-Logik ausfuehren.
+        if (StatusMod.isRemoteDisabled()) return;
 
         long now = System.currentTimeMillis();
         // Bossbar/Actionbar ticker runs on its own cadence (actionbar fades
@@ -209,6 +252,8 @@ public final class StatusLifecycle {
         if (tickCounter < effectiveInterval) return;
         tickCounter = 0;
 
+        restoreExpiredBlocks(server);
+
         boolean afkEnabled = StatusMod.config != null && StatusMod.config.enableAutoAfk && StatusMod.config.isEnabled("afk");
         int afkTimeoutMs = (StatusMod.config != null ? StatusMod.config.afkTimeoutSeconds : 300) * 1000;
 
@@ -218,13 +263,7 @@ public final class StatusLifecycle {
                 PlayerSettings settings = StatusMod.storage.forPlayer(uuid);
 
                 if (settings.statusExpiresAtMs > 0L && now >= settings.statusExpiresAtMs) {
-                    settings.status = "";
-                    settings.color = "reset";
-                    settings.statusExpiresAtMs = 0L;
-                    settings.autoAfk = false;
-                    settings.preAfkStatus = "";
-                    settings.preAfkColor = "reset";
-                    StatusMod.storage.put(uuid, settings);
+                    restoreExpiredTimedStatus(player, settings, uuid, true);
                 }
 
                 String posKey = player.getX() + "," + player.getY() + "," + player.getZ()
@@ -274,6 +313,116 @@ public final class StatusLifecycle {
             StatusTeamUtil.applyStatus(scoreboard, player, settings, status, color, PermissionUtil.hasAdminPermission(player));
         } catch (Exception e) {
             System.err.println("[StatusMod] Error reapplying status for player " + player.getScoreboardName());
+            e.printStackTrace();
+        }
+    }
+
+    /** Re-applies the tab-list suffix for an online player (used after moderation changes). */
+    public static void reapplyFor(ServerPlayer player, PlayerSettings settings) {
+        if (player == null || settings == null) return;
+        MinecraftServer server = player.level().getServer();
+        if (server == null) return;
+        reapplyStatus(server, player, player.getUUID().toString(), settings);
+    }
+
+    /**
+     * Restores the status stashed by a timed status once it expired.
+     * @return true when an expiry was processed.
+     */
+    public static boolean restoreExpiredTimedStatus(ServerPlayer player, PlayerSettings settings, String uuid, boolean notify) {
+        if (settings == null || settings.statusExpiresAtMs <= 0L) return false;
+        long now = System.currentTimeMillis();
+        if (now < settings.statusExpiresAtMs) return false;
+        String restored = settings.timedPrevStatus == null ? "" : settings.timedPrevStatus;
+        String restoredColor = settings.timedPrevColor == null || settings.timedPrevColor.isEmpty() ? "reset" : settings.timedPrevColor;
+        settings.statusExpiresAtMs = 0L;
+        settings.timedPrevStatus = "";
+        settings.timedPrevColor = "reset";
+        settings.autoAfk = false;
+        settings.preAfkStatus = "";
+        settings.preAfkColor = "reset";
+        settings.status = restored;
+        settings.color = restored.isEmpty() ? "reset" : restoredColor;
+        settings.lastStatusChangeAtMs = System.currentTimeMillis();
+        StatusMod.storage.put(uuid, settings);
+        if (player != null && player.level().getServer() != null) {
+            reapplyStatus(player.level().getServer(), player, uuid, settings);
+            if (notify) {
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal(restored.isEmpty()
+                    ? "§eDein zeitlich begrenzter Status ist abgelaufen."
+                    : "§eDein zeitlich begrenzter Status ist abgelaufen. Zurück zu: " + restored));
+            }
+        }
+        SyncManager.requestPush();
+        return true;
+    }
+
+    /**
+     * Removes expired temporary ignores and restores their stashed status.
+     * Runs on join and on the periodic tick pass.
+     */
+    public static void restoreExpiredBlocks(MinecraftServer server) {
+        if (server == null || StatusMod.getBlockedPlayers() == null) return;
+        Map<String, com.teufel.statusmod.storage.BlockedPlayers.BlockEntry> expired;
+        try {
+            expired = StatusMod.getBlockedPlayers().pollExpired();
+        } catch (Exception e) {
+            return;
+        }
+        if (expired == null || expired.isEmpty()) return;
+        for (Map.Entry<String, com.teufel.statusmod.storage.BlockedPlayers.BlockEntry> e : expired.entrySet()) {
+            ServerPlayer online = null;
+            try {
+                online = server.getPlayerList().getPlayer(java.util.UUID.fromString(e.getKey()));
+            } catch (Exception ignored) {}
+            restoreBlockedEntry(e.getKey(), online, e.getValue(), online != null);
+        }
+        SyncManager.requestPush();
+    }
+
+    /** Restores the status stashed when a temporary ignore was created. */
+    public static void restoreBlockedStatus(ServerPlayer player, com.teufel.statusmod.storage.BlockedPlayers.BlockEntry entry, boolean notify) {
+        if (player == null) return;
+        restoreBlockedEntry(player.getUUID().toString(), player, entry, notify);
+    }
+
+    public static void restoreBlockedEntry(String uuid, ServerPlayer player,
+            com.teufel.statusmod.storage.BlockedPlayers.BlockEntry entry, boolean notify) {
+        try {
+            if (uuid == null || entry == null || StatusMod.storage == null) return;
+            long now = System.currentTimeMillis();
+            String restored = entry.prevStatus == null ? "" : entry.prevStatus;
+            String restoredColor = entry.prevColor == null || entry.prevColor.isEmpty() ? "reset" : entry.prevColor;
+            long restoredExpiry = entry.prevExpiresAtMs;
+            String fallbackStatus = entry.prevTimedStatus == null ? "" : entry.prevTimedStatus;
+            String fallbackColor = entry.prevTimedColor == null || entry.prevTimedColor.isEmpty() ? "reset" : entry.prevTimedColor;
+            if (restoredExpiry > 0L && !restored.isEmpty() && now >= restoredExpiry) {
+                // The timed status would have expired while the player was ignored.
+                restored = fallbackStatus;
+                restoredColor = fallbackColor;
+                restoredExpiry = 0L;
+            }
+            if (restored.isEmpty()) return;
+            PlayerSettings settings = StatusMod.storage.forPlayer(uuid);
+            settings.status = restored;
+            settings.color = restoredColor;
+            settings.statusExpiresAtMs = restoredExpiry > now ? restoredExpiry : 0L;
+            settings.timedPrevStatus = restoredExpiry > now ? fallbackStatus : "";
+            settings.timedPrevColor = restoredExpiry > now ? fallbackColor : "reset";
+            settings.autoAfk = false;
+            settings.preAfkStatus = "";
+            settings.preAfkColor = "reset";
+            settings.lastStatusChangeAtMs = System.currentTimeMillis();
+            StatusMod.storage.put(uuid, settings);
+            if (player != null && player.level().getServer() != null) {
+                reapplyStatus(player.level().getServer(), player, uuid, settings);
+                if (notify) {
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                        "§aDein Kurzzeit-Ignore ist abgelaufen. Status wiederhergestellt: " + restored));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[StatusMod] Error restoring status after ignore expiry");
             e.printStackTrace();
         }
     }

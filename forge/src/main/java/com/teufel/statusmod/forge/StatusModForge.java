@@ -9,10 +9,12 @@ import com.teufel.statusmod.command.ModInfoCommand;
 import com.teufel.statusmod.command.SettingsCommand;
 import com.teufel.statusmod.command.StatusCommand;
 import com.teufel.statusmod.lifecycle.StatusLifecycle;
+import com.teufel.statusmod.util.ChatGuard;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.ServerChatEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.listener.SubscribeEvent;
@@ -28,6 +30,7 @@ public final class StatusModForge {
             StatusModForgeClient.init();
         }
         MinecraftForge.EVENT_BUS.register(this);
+        ServerChatEvent.BUS.addListener(event -> !ChatGuard.allowChat(event.getPlayer(), event.getRawText()));
     }
 
     @SubscribeEvent

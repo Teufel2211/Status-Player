@@ -105,6 +105,17 @@ public final class SyncManager {
                 started.set(false);
                 return;
             }
+            // Erst pullen, dann pushen: Dashboard-Edits werden lokal angewendet,
+            // bevor der naechste Push den (dann konsistenten) Stand hochlaedt.
+            if ((now - lastPull) >= PULL_INTERVAL_MS) {
+                lastPull = now;
+                try {
+                    pull();
+                } catch (Exception e) {
+                    lastPullInfo = "ex: " + e.getMessage();
+                    System.out.println("[StatusMod] Sync pull failed: " + e.getMessage());
+                }
+            }
             if (pushDirty || (now - lastPush) >= SYNC_INTERVAL_MS) {
                 pushDirty = false;
                 lastPush = now;
@@ -115,21 +126,18 @@ public final class SyncManager {
                     System.out.println("[StatusMod] Sync push failed: " + e.getMessage());
                 }
             }
-            if ((now - lastPull) >= PULL_INTERVAL_MS) {
-                lastPull = now;
-                try {
-                    pull();
-                } catch (Exception e) {
-                    lastPullInfo = "ex: " + e.getMessage();
-                    System.out.println("[StatusMod] Sync pull failed: " + e.getMessage());
-                }
-            }
         }
     }
 
     private static void push() {
         ModConfig config = StatusMod.getConfig();
         if (config == null || StatusMod.storage == null) return;
+        // Kill-Switch: keine Schreibvorgaenge, solange der Fleet-Owner den
+        // Server deaktiviert hat. Der Pull laeuft weiter (Flag-Erkennung).
+        if (StatusMod.isRemoteDisabled()) {
+            lastPushInfo = "disabled";
+            return;
+        }
         String dashboardUrl = CodeGenerator.trimTrailingSlash(config.effectiveDashboardUrl());
         if (!CodeGenerator.isSecureHttpUrl(dashboardUrl)) return;
         if (!isValidUuid(config.serverId)) return;
@@ -154,6 +162,8 @@ public final class SyncManager {
             entry.addProperty("online", onlineNames.containsKey(uuid));
             entry.addProperty("status", ps.status == null ? "" : ps.status);
             entry.addProperty("color", ps.color == null ? "reset" : ps.color);
+            long statusExpiresAt = ps.statusExpiresAtMs > System.currentTimeMillis() ? ps.statusExpiresAtMs : 0L;
+            entry.addProperty("status_expires_at", statusExpiresAt);
 
             JsonObject settings = new JsonObject();
             settings.addProperty("brackets", ps.brackets);
@@ -181,20 +191,45 @@ public final class SyncManager {
         JsonArray muted = new JsonArray();
         Map<String, Long> mutedAll = StatusMod.mutedPlayers == null
                 ? new HashMap<>() : StatusMod.mutedPlayers.getAllMuted();
+        Set<String> pushedMuted = new java.util.HashSet<>(mutedAll.keySet());
         for (Map.Entry<String, Long> e : mutedAll.entrySet()) {
             JsonObject m = new JsonObject();
             m.addProperty("uuid", e.getKey());
             m.addProperty("muted_until", e.getValue());
             muted.add(m);
         }
+        // Ingame-Unmute: Mutes, die im letzten erfolgreichen Push noch aktiv
+        // waren, jetzt aber lokal fehlen, als Loeschmarker mitsenden. Sonst
+        // bleibt die DB-Zeile stehen und der naechste Pull muted wieder.
+        Set<String> mutedDeletes = new java.util.HashSet<>(lastPushedMuted);
+        mutedDeletes.removeAll(pushedMuted);
+        for (String uuid : mutedDeletes) {
+            JsonObject m = new JsonObject();
+            m.addProperty("uuid", uuid);
+            m.addProperty("muted_until", 0L);
+            muted.add(m);
+        }
         payload.add("muted", muted);
 
         JsonArray blocked = new JsonArray();
-        Set<String> blockedAll = StatusMod.blockedPlayers == null
-                ? java.util.Collections.emptySet() : StatusMod.blockedPlayers.getBlockedPlayers();
-        for (String uuid : blockedAll) {
+        Map<String, com.teufel.statusmod.storage.BlockedPlayers.BlockEntry> blockedAll =
+                StatusMod.blockedPlayers == null
+                ? java.util.Collections.emptyMap() : StatusMod.blockedPlayers.getActiveEntries();
+        Set<String> pushedBlocked = new java.util.HashSet<>(blockedAll.keySet());
+        for (Map.Entry<String, com.teufel.statusmod.storage.BlockedPlayers.BlockEntry> e : blockedAll.entrySet()) {
+            JsonObject b = new JsonObject();
+            b.addProperty("uuid", e.getKey());
+            b.addProperty("expires_at", e.getValue() == null ? 0L : Math.max(0L, e.getValue().until));
+            blocked.add(b);
+        }
+        // Ingame-Unblock/abgelaufener Ignore: Zeile im Dashboard ebenfalls
+        // entfernen (active=false), sonst blockiert der naechste Pull erneut.
+        Set<String> blockedDeletes = new java.util.HashSet<>(lastPushedBlocked);
+        blockedDeletes.removeAll(pushedBlocked);
+        for (String uuid : blockedDeletes) {
             JsonObject b = new JsonObject();
             b.addProperty("uuid", uuid);
+            b.addProperty("active", false);
             blocked.add(b);
         }
         payload.add("blocked", blocked);
@@ -219,11 +254,13 @@ public final class SyncManager {
                 System.out.println("[StatusMod] Sync push status " + code);
             } else {
                 lastPushInfo = "ok";
-                // Erfolgreich übertragener Stand merken (für Pull-Reconcile).
+                // Snapshot des uebertragenen Stands merken (nicht den aktuellen
+                // Zustand: eine Aenderung waehrend des HTTP-Calls muss beim
+                // naechsten Push als Diff/Tombstone erkannt werden).
                 lastPushedMuted.clear();
-                if (StatusMod.mutedPlayers != null) lastPushedMuted.addAll(StatusMod.mutedPlayers.getAllMuted().keySet());
+                lastPushedMuted.addAll(pushedMuted);
                 lastPushedBlocked.clear();
-                if (StatusMod.blockedPlayers != null) lastPushedBlocked.addAll(StatusMod.blockedPlayers.getBlockedPlayers());
+                lastPushedBlocked.addAll(pushedBlocked);
             }
         } catch (java.io.IOException | InterruptedException e) {
             lastPushInfo = "ex: " + e.getMessage();
@@ -276,6 +313,21 @@ public final class SyncManager {
             System.out.println("[StatusMod] Sync pull: invalid JSON response");
             return;
         }
+
+        // Kill-Switch zuerst auswerten: die Antwort darf bei deaktiviertem
+        // Mod nur mod_enabled + server_time enthalten. Fehlt das Flag (alte
+        // Dashboard-Version), bleibt der Mod aktiv.
+        boolean remoteEnabled = true;
+        if (json.has("mod_enabled") && json.get("mod_enabled").isJsonPrimitive()
+                && json.get("mod_enabled").getAsJsonPrimitive().isBoolean()) {
+            remoteEnabled = json.get("mod_enabled").getAsBoolean();
+        }
+        applyRemoteEnabled(remoteEnabled);
+        if (!remoteEnabled) {
+            lastPullInfo = "disabled";
+            return;
+        }
+
         if (!json.has("muted") || !json.has("blocked") || !json.has("server_time")) return;
 
         java.util.Set<String> reportedMuted = new java.util.HashSet<>();
@@ -299,19 +351,119 @@ public final class SyncManager {
         }
 
         java.util.Set<String> reportedBlocked = new java.util.HashSet<>();
+        long nowMs = System.currentTimeMillis();
         for (JsonElement el : json.getAsJsonArray("blocked")) {
             try {
                 JsonObject b = el.getAsJsonObject();
                 String uuid = b.get("uuid").getAsString();
                 if (!isValidUuid(uuid)) continue;
-                StatusMod.blockedPlayers.block(uuid);
+                long until = 0L;
+                if (b.has("expires_at") && !b.get("expires_at").isJsonNull()) {
+                    JsonElement ex = b.get("expires_at");
+                    if (ex.isJsonPrimitive() && ex.getAsJsonPrimitive().isNumber()) {
+                        until = ex.getAsLong();
+                    } else {
+                        try { until = java.time.Instant.parse(ex.getAsString()).toEpochMilli(); } catch (Exception ignored) {}
+                    }
+                }
+                if (until > nowMs) {
+                    if (!StatusMod.blockedPlayers.isBlocked(uuid)) {
+                        PlayerSettings ps = StatusMod.storage == null ? null : StatusMod.storage.forPlayer(uuid);
+                        String prevStatus = ps == null ? "" : ps.status;
+                        String prevColor = ps == null ? "reset" : ps.color;
+                        long prevExpiresAtMs = ps == null ? 0L : ps.statusExpiresAtMs;
+                        String prevTimedStatus = ps == null ? "" : ps.timedPrevStatus;
+                        String prevTimedColor = ps == null ? "reset" : ps.timedPrevColor;
+                        StatusMod.blockedPlayers.blockTemporary(uuid, until, prevStatus, prevColor,
+                                prevExpiresAtMs, prevTimedStatus, prevTimedColor);
+                        if (ps != null) {
+                            ps.status = "";
+                            ps.color = "reset";
+                            ps.statusExpiresAtMs = 0L;
+                            ps.timedPrevStatus = "";
+                            ps.timedPrevColor = "reset";
+                            ps.lastStatusChangeAtMs = System.currentTimeMillis();
+                            StatusMod.storage.put(uuid, ps);
+                            applyOnline(serverRef, uuid, ps);
+                        }
+                    } else if (StatusMod.blockedPlayers.isTemporary(uuid)) {
+                        StatusMod.blockedPlayers.blockTemporary(uuid, until, null, null);
+                    }
+                } else if (until <= 0L) {
+                    if (!StatusMod.blockedPlayers.isBlocked(uuid)) {
+                        StatusMod.blockedPlayers.block(uuid);
+                        if (StatusMod.storage != null) {
+                            PlayerSettings ps = StatusMod.storage.forPlayer(uuid);
+                            ps.status = "";
+                            ps.color = "reset";
+                            ps.statusExpiresAtMs = 0L;
+                            ps.timedPrevStatus = "";
+                            ps.timedPrevColor = "reset";
+                            ps.lastStatusChangeAtMs = System.currentTimeMillis();
+                            StatusMod.storage.put(uuid, ps);
+                            applyOnline(serverRef, uuid, ps);
+                        }
+                    }
+                }
                 reportedBlocked.add(uuid);
+                lastPushedBlocked.add(uuid);
             } catch (Exception ignored) {}
         }
         for (String uuid : new java.util.HashSet<>(lastPushedBlocked)) {
             if (!reportedBlocked.contains(uuid) && StatusMod.blockedPlayers != null) {
-                StatusMod.blockedPlayers.unblock(uuid);
+                com.teufel.statusmod.storage.BlockedPlayers.BlockEntry removed = StatusMod.blockedPlayers.unblock(uuid);
+                if (removed != null) {
+                    ServerPlayer online = null;
+                    try {
+                        if (serverRef != null) online = serverRef.getPlayerList().getPlayer(java.util.UUID.fromString(uuid));
+                    } catch (Exception ignored) {}
+                    com.teufel.statusmod.lifecycle.StatusLifecycle.restoreBlockedEntry(uuid, online, removed, false);
+                }
+                lastPushedBlocked.remove(uuid);
             }
+        }
+
+        if (json.has("warnings") && json.get("warnings").isJsonArray() && StatusMod.warningStore != null) {
+            Map<String, com.teufel.statusmod.storage.WarningStore.WarnInfo> warnMap = new HashMap<>();
+            for (JsonElement el : json.getAsJsonArray("warnings")) {
+                try {
+                    JsonObject w = el.getAsJsonObject();
+                    String uuid = w.get("uuid").getAsString();
+                    if (!isValidUuid(uuid)) continue;
+                    int level = w.has("level") ? w.get("level").getAsInt() : 0;
+                    int count = w.has("count") ? w.get("count").getAsInt() : level;
+                    long updated = 0L;
+                    if (w.has("updated_at") && !w.get("updated_at").isJsonNull()) {
+                        try { updated = java.time.Instant.parse(w.get("updated_at").getAsString()).toEpochMilli(); } catch (Exception ignored) {}
+                    }
+                    if (level > 0 && count > 0) {
+                        warnMap.put(uuid, new com.teufel.statusmod.storage.WarningStore.WarnInfo(level, count, updated));
+                    }
+                } catch (Exception ignored) {}
+            }
+            if (StatusMod.warningStore.replaceAll(warnMap)) {
+                refreshOnlineSuffixes();
+            }
+        }
+
+        if (json.has("presets") && json.get("presets").isJsonArray() && StatusMod.serverPresets != null) {
+            Map<String, com.teufel.statusmod.storage.ServerPresets.ServerPreset> presetMap = new HashMap<>();
+            for (JsonElement el : json.getAsJsonArray("presets")) {
+                try {
+                    JsonObject pr = el.getAsJsonObject();
+                    String name = pr.has("name") ? pr.get("name").getAsString() : "";
+                    String statusText = pr.has("status") ? pr.get("status").getAsString() : "";
+                    String color = pr.has("color") ? pr.get("color").getAsString() : "reset";
+                    long updated = 0L;
+                    if (pr.has("updated_at") && !pr.get("updated_at").isJsonNull()) {
+                        try { updated = java.time.Instant.parse(pr.get("updated_at").getAsString()).toEpochMilli(); } catch (Exception ignored) {}
+                    }
+                    if (name != null && !name.isBlank() && statusText != null && !statusText.isEmpty()) {
+                        presetMap.put(name, new com.teufel.statusmod.storage.ServerPresets.ServerPreset(statusText, color, updated));
+                    }
+                } catch (Exception ignored) {}
+            }
+            StatusMod.serverPresets.replaceAll(presetMap);
         }
 
         if (json.has("players") && json.get("players").isJsonArray()) {
@@ -329,20 +481,57 @@ public final class SyncManager {
                     try { dbTime = java.time.Instant.parse(p.get("updated_at").getAsString()).toEpochMilli(); } catch (Exception ignored) {}
                 }
                 PlayerSettings ps = StatusMod.storage.forPlayer(uuid);
+                if (p.has("slowmode_seconds") && !p.get("slowmode_seconds").isJsonNull() && StatusMod.slowmodeStore != null) {
+                    try {
+                        StatusMod.slowmodeStore.setSeconds(uuid, p.get("slowmode_seconds").getAsInt());
+                    } catch (Exception ignored) {}
+                }
                 if (dbTime > 0L && ps.lastStatusChangeAtMs > 0L && dbTime < ps.lastStatusChangeAtMs) {
                     // DB is older than local edit -> local not yet pushed, skip to preserve unpushed change
                     continue;
                 }
+                boolean blocked = StatusMod.blockedPlayers != null && StatusMod.blockedPlayers.isBlocked(uuid);
                 boolean changed = false;
+                if (!blocked) {
                 if (hasStatus) {
                     String status = StatusTextUtil.sanitizePlayerText(p.get("status").getAsString(), MAX_STATUS_LENGTH);
-                    if (!status.equals(ps.status)) { ps.status = status; changed = true; }
+                    if (!status.equals(ps.status)) {
+                        ps.status = status;
+                        // Dashboard-Edit beendet einen laufenden Timed-Status.
+                        ps.statusExpiresAtMs = 0L;
+                        ps.timedPrevStatus = "";
+                        ps.timedPrevColor = "reset";
+                        changed = true;
+                    }
                 }
                 if (hasColor) {
                     String rc = p.get("color").getAsString();
                     String color = (rc != null && ColorMapper.isValidColorInput(rc)
                         && rc.length() <= MAX_COLOR_LENGTH) ? rc : "reset";
                     if (!color.equals(ps.color)) { ps.color = color; changed = true; }
+                }
+                // Ablaufzeit aus dem Dashboard uebernehmen (Dashboard-Edit setzt
+                // sie auf null und beendet damit den Timed-Status).
+                if (p.has("status_expires_at")) {
+                    long expires = 0L;
+                    JsonElement ex = p.get("status_expires_at");
+                    if (ex != null && !ex.isJsonNull()) {
+                        if (ex.isJsonPrimitive() && ex.getAsJsonPrimitive().isNumber()) {
+                            expires = ex.getAsLong();
+                        } else {
+                            try { expires = java.time.Instant.parse(ex.getAsString()).toEpochMilli(); } catch (Exception ignored) {}
+                        }
+                    }
+                    long normalized = expires > System.currentTimeMillis() ? expires : 0L;
+                    if (normalized != ps.statusExpiresAtMs) {
+                        ps.statusExpiresAtMs = normalized;
+                        if (normalized == 0L) {
+                            ps.timedPrevStatus = "";
+                            ps.timedPrevColor = "reset";
+                        }
+                        changed = true;
+                    }
+                }
                 }
                 if (changed) {
                     ps.lastStatusChangeAtMs = System.currentTimeMillis();
@@ -361,6 +550,9 @@ public final class SyncManager {
             com.teufel.statusmod.storage.ModConfig fresh =
                 com.teufel.statusmod.storage.ModConfig.load();
             fresh.lastSyncAtMs = wm;
+            // In-Memory-Zustand ist die Wahrheit (gerade aus dem Pull gesetzt);
+            // ein veralteter Wert auf der Platte darf ihn nicht ueberschreiben.
+            fresh.remoteDisabled = StatusMod.isRemoteDisabled();
             fresh.save();
             com.teufel.statusmod.StatusMod.config = fresh;
         } catch (Exception ignored) {}
@@ -394,6 +586,46 @@ public final class SyncManager {
                 } catch (Exception ignored) {}
             });
         } catch (Exception ignored) {}
+    }
+
+    /**
+     * Wendet den vom Dashboard gemeldeten Kill-Switch an und raeumt beim
+     * Ausschalten sofort alle sichtbaren Status-Anzeigen ab. Beim Einschalten
+     * werden die Status der Online-Spieler direkt neu gerendert.
+     */
+    private static void applyRemoteEnabled(boolean enabled) {
+        boolean disabled = !enabled;
+        if (StatusMod.isRemoteDisabled() == disabled) return;
+        StatusMod.setRemoteDisabled(disabled);
+        MinecraftServer server = serverRef;
+        if (server != null) {
+            server.execute(() ->
+                com.teufel.statusmod.lifecycle.StatusLifecycle.onRemoteStateChanged(server, enabled));
+        }
+        System.out.println(disabled
+            ? "[StatusMod] Remote kill switch active: StatusMod disabled by dashboard."
+            : "[StatusMod] Remote kill switch released: StatusMod enabled by dashboard.");
+    }
+
+    /** Re-renders the tab suffix for all online players (warning badge changes). */
+    private static void refreshOnlineSuffixes() {
+        MinecraftServer server = serverRef;
+        if (server == null || StatusMod.storage == null) return;
+        server.execute(() -> {
+            try {
+                ModConfig cfg = StatusMod.getConfig();
+                if (cfg == null) return;
+                if (!cfg.isEnabled("status") && !cfg.isEnabled("badge") && !cfg.isEnabled("warn")) return;
+                for (ServerPlayer sp : server.getPlayerList().getPlayers()) {
+                    PlayerSettings ps = StatusMod.storage.forPlayer(sp.getUUID().toString());
+                    com.teufel.statusmod.util.StatusTeamUtil.applyStatus(
+                            server.getScoreboard(), sp, ps,
+                            ps.status == null ? "" : ps.status,
+                            ps.color == null ? "reset" : ps.color,
+                            com.teufel.statusmod.util.PermissionUtil.hasAdminPermission(sp));
+                }
+            } catch (Exception ignored) {}
+        });
     }
 
     private static boolean isValidUuid(String s) {

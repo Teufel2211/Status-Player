@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { badGateway, badRequest, tooMany, unauthorized } from "@/lib/response"
+import { badGateway, badRequest, forbidden, tooMany, unauthorized } from "@/lib/response"
 import { requireApiKey } from "@/lib/auth"
 import { checkRateLimit, getRateLimitHeaders, RATE_LIMITS } from "@/lib/rate-limit"
 import { BugReportSchema } from "@/lib/validators"
@@ -37,6 +37,15 @@ export async function POST(request: Request) {
   if (!rate.allowed) return tooMany("Zu viele Bug-Meldungen. Bitte warte einige Minuten.")
 
   const sb = getServiceClient()
+
+  // Kill-Switch: keine Bug-Meldungen von deaktivierten Servern annehmen.
+  const [{ data: serverRow }, { data: fleetRow }] = await Promise.all([
+    (sb as any).from("servers").select("mod_enabled").eq("id", report.server_id).maybeSingle(),
+    (sb as any).from("fleet_config").select("mod_enabled").eq("id", 1).maybeSingle(),
+  ])
+  if (serverRow?.mod_enabled === false || fleetRow?.mod_enabled === false) {
+    return forbidden("StatusMod ist für diesen Server deaktiviert.")
+  }
 
   // Upload-Code pro Meldung (30 Min gültig). In der DB liegt nur der Hash;
   // bei der seltenen Kollision des Unique-Index wird neu gewürfelt.

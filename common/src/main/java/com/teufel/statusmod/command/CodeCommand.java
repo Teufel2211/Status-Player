@@ -29,7 +29,7 @@ public final class CodeCommand {
     private CodeCommand() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("code").executes(ctx -> {
+        dispatcher.register(Commands.literal("code").requires(ctx -> !StatusMod.isRemoteDisabled()).executes(ctx -> {
             handleCode(ctx.getSource());
             return 1;
         }));

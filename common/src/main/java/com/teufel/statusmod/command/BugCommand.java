@@ -50,6 +50,7 @@ public final class BugCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("bug")
+                .requires(ctx -> !StatusMod.isRemoteDisabled())
                 .executes(ctx -> {
                     ctx.getSource().sendFailure(Component.literal("Nutze: /bug <Beschreibung> — was ist passiert?"));
                     return 0;
@@ -63,6 +64,7 @@ public final class BugCommand {
         // Vanilla-Clients, die den Chat-Button "[Im Spiel anhängen]" klicken,
         // landen hier. Mit Client-Mod wird der Befehl lokal abgefangen.
         dispatcher.register(Commands.literal("bugbild")
+                .requires(ctx -> !StatusMod.isRemoteDisabled())
                 .executes(ctx -> {
                     sendImageHint(ctx.getSource());
                     return 1;

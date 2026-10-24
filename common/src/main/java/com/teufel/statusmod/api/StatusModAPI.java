@@ -32,6 +32,7 @@ public final class StatusModAPI {
 
     public static void setStatus(UUID uuid, String status, String color) {
         if (uuid == null || StatusMod.storage == null || status == null) return;
+        if (StatusMod.isRemoteDisabled()) return;
         String key = uuid.toString();
         // External callers bypass commands: enforce the same guards
         // (mute/block/sanitize) so the API cannot be used to circumvent them.
@@ -54,6 +55,7 @@ public final class StatusModAPI {
 
     public static void clearStatus(UUID uuid) {
         if (uuid == null || StatusMod.storage == null) return;
+        if (StatusMod.isRemoteDisabled()) return;
         String key = uuid.toString();
         PlayerSettings settings = StatusMod.storage.forPlayer(key);
         settings.status = "";
@@ -64,6 +66,7 @@ public final class StatusModAPI {
 
     public static void refreshDisplay(MinecraftServer server, UUID uuid) {
         if (server == null || uuid == null || StatusMod.storage == null) return;
+        if (StatusMod.isRemoteDisabled()) return;
         ServerPlayer player = server.getPlayerList().getPlayer(uuid);
         if (player == null) return;
         String key = uuid.toString();

@@ -1,5 +1,6 @@
 package com.teufel.statusmod.command;
 
+import com.teufel.statusmod.StatusMod;
 import com.teufel.statusmod.util.CommandUtil;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
@@ -15,6 +16,10 @@ public class ModInfoCommand {
             CommandSourceStack src = ctx.getSource();
             try {
                 CommandUtil.sendSuccess(src, Component.literal("StatusMod — Informationen"), false);
+                CommandUtil.sendSuccess(src, Component.literal("Status: "
+                    + (StatusMod.isRemoteDisabled()
+                        ? "vom Admin-Dashboard deaktiviert"
+                        : "aktiv")), false);
                 CommandUtil.sendSuccess(src, Component.literal("Website: " + WEBSITE), false);
                 CommandUtil.sendSuccess(src, Component.literal("Issues: " + ISSUES), false);
             } catch (Exception e) {

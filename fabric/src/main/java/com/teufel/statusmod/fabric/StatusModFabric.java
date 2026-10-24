@@ -9,8 +9,10 @@ import com.teufel.statusmod.command.ModInfoCommand;
 import com.teufel.statusmod.command.SettingsCommand;
 import com.teufel.statusmod.command.StatusCommand;
 import com.teufel.statusmod.lifecycle.StatusLifecycle;
+import com.teufel.statusmod.util.ChatGuard;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.api.ModInitializer;
 
@@ -30,5 +32,7 @@ public final class StatusModFabric implements ModInitializer {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> StatusLifecycle.onPlayerJoin(server, handler.getPlayer()));
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> StatusLifecycle.onPlayerDisconnect(handler.getPlayer()));
         ServerTickEvents.END_SERVER_TICK.register(StatusLifecycle::onServerTick);
+        ServerMessageEvents.ALLOW_CHAT_MESSAGE.register((message, player, params) ->
+            ChatGuard.allowChat(player, message.signedContent()));
     }
 }

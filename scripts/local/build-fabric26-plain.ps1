@@ -225,7 +225,7 @@ $pomText = Get-Content -LiteralPath $fapiPom -Raw
 # Only the modules our sources import (keeps the classpath small and cache-friendly).
 $NeededModules = @("fabric-command-api-v2", "fabric-lifecycle-events-v1",
     "fabric-networking-api-v1", "fabric-api-base", "fabric-permission-api-v1",
-    "fabric-key-mapping-api-v1")
+    "fabric-key-mapping-api-v1", "fabric-message-api-v1")
 $modules = [regex]::Matches($pomText, "<dependency>.*?</dependency>", "Singleline") | ForEach-Object {
     if ($_.Value -match "<artifactId>(fabric-[^<]+)</artifactId>\s*<version>([^<]+)</version>") {
         [pscustomobject]@{ artifact = $Matches[1]; version = $Matches[2] }

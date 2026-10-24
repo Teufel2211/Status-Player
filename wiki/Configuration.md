@@ -30,7 +30,7 @@ When the dashboard values change centrally, update `dashboardUrl`/`setupSecret` 
 | `statusReapplyTicks` | `100` | Re-apply display every N ticks (20–6000). |
 | `statusCooldownSeconds` | `2` | Cooldown between status changes (0–300, admins exempt). |
 | `statusHistorySize` | `5` | Entries kept for `/status history` (0–20). |
-| `features` | all `true` | Per-feature toggles: `status badge afk block mute presets code sync bug` (see `/status feature`). |
+| `features` | all `true` | Per-feature toggles: `status badge afk block mute presets code sync bug warn slowmode` (see `/status feature`). |
 | `enableAutoAfk` / `afkTimeoutSeconds` / `afkStatusText` / `afkColor` | `true` / `300` / `AFK` / `gray` | Auto-AFK after inactivity (30–3600s). Restores previous status on return. |
 | `bossbarListEnabled` / `sidebarListEnabled` | `false` | Status list channels (Bedrock-visible). |
 | `bossbarColor` / `bossbarOverlay` / `bossbarShowHeader` / `bossbarMode` | `WHITE` / `PROGRESS` / `false` / `BAR` | Boss-bar rendering (`BAR` or `ACTIONBAR`). |

@@ -5,13 +5,13 @@ Legend: `(admin)` needs OP level (default 2, see `adminOpLevel`) or the `statusm
 ## Status
 
 - `/status` — opens the preset menu (beginner GUI)
-- `/status <text> [color]` — set your status, e.g. `/status AFK red`
+- `/status <text> [color] [duration]` — set your status, e.g. `/status AFK red 2h`; duration accepts `30m`, `2h`, `1d`. The status reverts automatically (also after a restart).
 - `/status clear` — delete your status
-- `/status preset <name>` — apply a preset (built-in or own custom)
+- `/status preset <name>` — apply a preset (built-in, own custom, or server-wide)
 - `/status preset save <name> <text> [color]` — save your own preset
 - `/status preset remove <name>` — delete your own preset
-- `/status preset list` — list presets
-- `/status timed <minutes> <text>` — status with expiry
+- `/status preset list` — list presets (built-in, own, server-wide)
+- `/status timed <minutes> <text>` — status with expiry (same as a duration)
 - `/status random <text>` — status with a stable random color
 - `/status world <text> [color]` — per-world status (current world only)
 - `/status world clear` — delete per-world status
@@ -29,7 +29,6 @@ Legend: `(admin)` needs OP level (default 2, see `adminOpLevel`) or the `statusm
 - `/status avatar <name|url|off>` — your dashboard avatar (player name or `https://` skin PNG)
 - `/status sidebar <on|off>` — sidebar status list
 - `/status topbar <on|off>` — boss-bar status display
-
 ## Bugs
 
 - `/bug <text>` — report a bug; requires the server to be connected to a dashboard (the report lands in the server team's dashboard)
@@ -47,21 +46,24 @@ Legend: `(admin)` needs OP level (default 2, see `adminOpLevel`) or the `statusm
 - `/status admin clear <player>` — clear someone's status
 - `/status admin mute <player> <minutes>` / `/status admin unmute <player>` — mute from StatusMod
 - `/status badge <player> <text> [color]` — staff badge; `/status badge clear <player>`
-- `/status feature list` / `/status feature <key> <on|off>` — toggles: `status badge afk block mute presets code sync bug`
+- `/status feature list` / `/status feature <key> <on|off>` — toggles: `status badge afk block mute presets code sync bug warn slowmode`
 - `/status config show` / `/status config reload` — view/reload config
 - `/status sync` — sync wiring + last push/pull (shows key prefix only)
 - `/status apikey <key>` — store dashboard API key (**prefer console**: typed commands land in the server log)
 - `/status setup-secret <secret>` — store dashboard setup secret (same warning)
 - `/status transfer <server-id> <key>` — copy statuses from another server on the same dashboard
-- `/block <player>` / `/unblock <player>` — block from StatusMod
+- `/block <player>` / `/unblock <player>` — block from StatusMod (permanent)
+- `/ignore <player> [duration]` / `/unignore <player>` — temporary block, e.g. `1h` or `1d`; returns automatically
 - `/code` — login code for the dashboard (admin only)
-- `/modinfo` — mod info + links
+- `/modinfo` — mod info + links (also works while the dashboard has disabled StatusMod)
 
 ## Examples
 
 - `/status AFK red`
 - `/status Workshop #ffaa00`
+- `/status Bauen 2h`
 - `/status Bin gleich zurück`
 - `/settings words 2`
 - `/status avatar Delle2211`
 - `/status preset save shop Offen green`
+- `/ignore Griefer 1d`

@@ -10,10 +10,22 @@ if (-not (Test-Path $distDir)) {
     throw "dist directory not found: $distDir"
 }
 
-$jars = @(Get-ChildItem -Path $distDir -Recurse -File -Filter *.jar |
+$allJars = @(Get-ChildItem -Path $distDir -Recurse -File -Filter *.jar |
     Where-Object { $_.FullName -notmatch "\\.gradle-user-home\\|\\logs\\" })
-if ($jars.Count -eq 0) {
+if ($allJars.Count -eq 0) {
     throw "No JARs found under $distDir"
+}
+
+# Stale artifacts from older local builds must not make verification fail.
+# CI starts with a clean dist directory, so this only affects local runs.
+$versionPattern = "^Statusmod-$([Regex]::Escape($modVersion))-"
+$jars = @($allJars | Where-Object { $_.Name -match $versionPattern })
+$skipped = $allJars.Count - $jars.Count
+if ($skipped -gt 0) {
+    Write-Host "Skipping $skipped JAR(s) that are not Statusmod-$modVersion-*"
+}
+if ($jars.Count -eq 0) {
+    throw "No Statusmod-$modVersion JARs found under $distDir"
 }
 
 $expected = @(

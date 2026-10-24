@@ -47,6 +47,7 @@ public class StatusGuiCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("status")
+            .requires(ctx -> !StatusMod.isRemoteDisabled())
             .then(Commands.literal("gui")
                 .executes(ctx -> {
                     if (!PermissionUtil.hasAdminPermission(ctx.getSource())) { ctx.getSource().sendFailure(Component.literal("Du hast nicht genugend Rechte.")); return 0; }

@@ -5,7 +5,7 @@ Players can set a custom status text and color that is shown in the player list 
 
 ## Highlights
 
-- `/status <text> [color]` to set your status quickly
+- `/status <text> [color] [duration]` to set your status quickly (`30m`, `2h`, `1d`)
 - `/status clear` to remove your status
 - `/status preset <name>`, `/status timed <minutes> <status>`, `/status random <status>`
 - `/status world <status>` per-dimension override
@@ -13,16 +13,17 @@ Players can set a custom status text and color that is shown in the player list 
 - Color support for English and German names, plus hex (`#RRGGBB` / `#RGB`)
 - Placeholders: `{world}`, `{ping}`
 - Your status is saved and restored automatically when you rejoin
-- Admin tools for moderation (`/block`, `/unblock`, `/status admin ...`)
+- Timed statuses revert automatically, even after a server restart
+- Admin tools for moderation (`/block`, `/unblock`, `/ignore`, `/unignore`, `/status admin ...`)
 
 ## Commands
 
-- `/status <text> [color]`
+- `/status <text> [color] [duration]`
 - `/status clear`
 - `/status preset <name>`
 - `/status timed <minutes> <status>`
 - `/status random <status>`
-- `/status world <status> [color>`
+- `/status world <status> [color]`
 - `/status world clear`
 - `/status history`
 - `/color <name|hex|reset>`
@@ -31,8 +32,8 @@ Players can set a custom status text and color that is shown in the player list 
 - `/settings words <number>`
 - `/status admin set <player> <status> [color]` (if enabled in config)
 - `/status admin clear <player>` (if enabled in config)
-- `/block <player>`
-- `/unblock <player>`
+- `/block <player>` / `/unblock <player>`
+- `/ignore <player> [duration]` / `/unignore <player>` (temporary block)
 - `/status config show`
 - `/status config reload`
 - `/modinfo`
@@ -41,9 +42,11 @@ Players can set a custom status text and color that is shown in the player list 
 
 - `/status AFK red`
 - `/status Workshop #ffaa00`
+- `/status Bauen 2h`
 - `/status Busy`
 - `/settings words 2`
 - `/status Not Disturb orange` (with `words=2`, status = `Not Disturb`, color = `orange`)
+- `/ignore Griefer 1d`
 
 ## Installation
 

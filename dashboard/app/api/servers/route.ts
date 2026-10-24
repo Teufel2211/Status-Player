@@ -13,12 +13,20 @@ export async function GET(request: Request) {
   const sb = getServiceClient()
   const { data: servers, error } = await (sb as any)
     .from("servers")
-    .select("id, created_at")
+    .select("id, created_at, mod_enabled")
     .eq("owner_uuid", session.sub)
     .order("created_at", { ascending: true })
 
   if (error) return serverError()
   const list = Array.isArray(servers) ? servers : []
+
+  const { data: fleet, error: fleetError } = await (sb as any)
+    .from("fleet_config")
+    .select("mod_enabled")
+    .eq("id", 1)
+    .maybeSingle()
+
+  if (fleetError) return serverError()
 
   const out = []
   for (const s of list) {
@@ -39,8 +47,17 @@ export async function GET(request: Request) {
     } catch {
       // counts stay null
     }
-    out.push({ id: s.id, created_at: s.created_at ?? null, known, online })
+    out.push({
+      id: s.id,
+      created_at: s.created_at ?? null,
+      known,
+      online,
+      mod_enabled: s.mod_enabled !== false,
+    })
   }
 
-  return ok(out)
+  return ok({
+    servers: out,
+    global_mod_enabled: fleet?.mod_enabled !== false,
+  })
 }

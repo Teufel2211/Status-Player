@@ -4,9 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+- Timed statuses: `/status <text> [color] <duration>` (for example `30m`, `2h`, `1d`). The previous status returns automatically when the time is up, also after a server restart; the dashboard shows the remaining time.
+- Temporary ignore: `/ignore <player> [duration]` and `/unignore <player>`, plus duration controls in the dashboard. The previous status is restored automatically when the ignore expires.
+- Per-player chat slowmode: set the minimum seconds between chat messages in the dashboard; players get a remaining-time notice when they send too fast.
+- Warning levels 1–3: assigned only in the dashboard, shown in-game as `[!1]`/`[!2]`/`[!3]` next to the status (yellow → gold → red). Warnings expire automatically (default 14 days, configurable); only active warnings count. From 3 active warnings the dashboard offers a 60-minute mute (opt-in per server, never applied automatically).
+- Server presets: owners maintain name, status and color in the dashboard; they appear in-game in the `/status` menu, `/status preset list` and `/status preset <name>` for all players.
 - New `/bug <text>` command: report bugs right from the game. The report (player name, server, mod/MC version, loader) lands in the dashboard inbox of the server team. Needs a dashboard-connected server; can be toggled with `/status feature bug`.
 - `/bug` now accepts up to 3 screenshots per report: attach them in-game (screenshot picker) or upload them in the browser via the link in chat (works for vanilla clients and Bedrock players too). Images show up as thumbnails in the dashboard inbox.
 - New keybind (default `U`) opens the `/status` menu. Rebindable under Options → Controls → Key Binds → StatusMod.
+- Admin kill switch: disable StatusMod per server or for the whole fleet from the admin dashboard. While disabled, status display, AFK, moderation, commands and sync push are off; the mod keeps polling, so re-enabling applies within 15 seconds without a restart. `/modinfo` still reports the state.
 
 ## 1.4.1 - 2026-10-15
 

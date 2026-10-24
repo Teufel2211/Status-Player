@@ -31,7 +31,7 @@ public class ModConfig {
     public Map<String, Boolean> features = new HashMap<>();
 
     private static final String[] FEATURE_KEYS = {
-        "status", "badge", "afk", "block", "mute", "presets", "code", "sync", "bug"
+        "status", "badge", "afk", "block", "mute", "presets", "code", "sync", "bug", "warn", "slowmode"
     };
 
     public boolean isEnabled(String key) {
@@ -65,6 +65,12 @@ public class ModConfig {
     public String serverId = "";
     public String apiKey = "";
     public long lastSyncAtMs = 0L;
+    /**
+     * Zuletzt vom Dashboard gemeldeter Kill-Switch-Zustand. Persistiert, damit
+     * ein Server nach einem Neustart nicht fuer bis zu 15 Sekunden wieder
+     * aktiv ist, bevor der erste Sync-Pull das Flag holt.
+     */
+    public boolean remoteDisabled = false;
 
     private static final Gson GSON = new Gson();
     // Pretty printer for config saves: one setting per line ("key": value).

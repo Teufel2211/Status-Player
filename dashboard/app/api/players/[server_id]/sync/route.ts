@@ -12,6 +12,7 @@ const PlayerSyncSchema = z.object({
   settings: z.record(z.unknown()).optional().nullable(),
   avatar: z.string().max(160).optional().nullable(),
   online: z.boolean().optional(),
+  status_expires_at: z.number().int().nonnegative().max(8640000000000000).optional(),
 })
 
 const MutedSyncSchema = z.object({
@@ -23,6 +24,8 @@ const MutedSyncSchema = z.object({
 const BlockedSyncSchema = z.object({
   uuid: z.string().min(1).max(64),
   active: z.boolean().optional().default(true),
+  // 0 = permanent, >0 = automatische Rueckkehr zu diesem Zeitpunkt (ms).
+  expires_at: z.number().int().nonnegative().max(8640000000000000).optional(),
 })
 
 const SyncBodySchema = z.object({
@@ -43,20 +46,33 @@ export async function POST(
   const authed = await requireApiKey(request, "check", params.server_id)
   if (!authed) return unauthorized()
 
+  const sb = getServiceClient()
+
+  // Kill-Switch: Schreibvorgaenge still verwerfen, solange der Server (oder
+  // die ganze Flotte) im Admin-Dashboard deaktiviert ist. 200 statt Fehler,
+  // damit ein Mod, der das Flag noch nicht geholt hat, nicht Logs spammt.
+  const { data: serverRow, error: flagError } = await (sb as any)
+    .from("servers")
+    .select("mod_enabled")
+    .eq("id", params.server_id)
+    .maybeSingle()
+  if (flagError) return serverError()
+  if (!serverRow) return badRequest()
+
+  const { data: fleetRow } = await (sb as any)
+    .from("fleet_config")
+    .select("mod_enabled")
+    .eq("id", 1)
+    .maybeSingle()
+  if (serverRow.mod_enabled === false || fleetRow?.mod_enabled === false) {
+    return ok({ synced: 0, mod_enabled: false })
+  }
+
   let body: unknown
   try { body = await request.json() } catch { return badRequest() }
 
   const parsed = SyncBodySchema.safeParse(body)
   if (!parsed.success) return badRequest()
-
-  const sb = getServiceClient()
-
-  const { data: serverExists } = await (sb as any)
-    .from("servers")
-    .select("id")
-    .eq("id", params.server_id)
-    .maybeSingle()
-  if (!serverExists) return badRequest()
 
   const nowIso = new Date().toISOString()
   const rows = parsed.data.players.map((p) => {
@@ -74,6 +90,10 @@ export async function POST(
     if (p.color != null) row.color = p.color
     if (p.settings != null) row.settings = p.settings
     if (p.avatar !== undefined && p.avatar !== null) row.avatar = p.avatar === "" ? null : p.avatar
+    if (p.status_expires_at !== undefined) {
+      row.status_expires_at =
+        p.status_expires_at > 0 ? new Date(p.status_expires_at).toISOString() : null
+    }
     return row
   })
 
@@ -114,7 +134,8 @@ export async function POST(
     .map((b) => ({
       uuid: b.uuid,
       server_id: params.server_id,
-      blocked_at: new Date().toISOString(),
+      expires_at:
+        b.expires_at && b.expires_at > 0 ? new Date(b.expires_at).toISOString() : null,
     }))
   const blockedDelete = parsed.data.blocked.filter((b) => b.active === false)
 
@@ -152,9 +173,28 @@ export async function GET(
 
   const sb = getServiceClient()
 
+  const { data: serverRow, error: flagError } = await (sb as any)
+    .from("servers")
+    .select("mod_enabled")
+    .eq("id", params.server_id)
+    .maybeSingle()
+  if (flagError) return serverError()
+  if (!serverRow) return badRequest()
+
+  const { data: fleetRow } = await (sb as any)
+    .from("fleet_config")
+    .select("mod_enabled")
+    .eq("id", 1)
+    .maybeSingle()
+  if (serverRow.mod_enabled === false || fleetRow?.mod_enabled === false) {
+    // Nur das Flag liefern: der Mod ueberspringt die Datenverarbeitung und
+    // laesst den Watermark stehen, damit Re-Enable den Rueckstand nachzieht.
+    return ok({ mod_enabled: false, server_time: new Date().toISOString() })
+  }
+
   let playerQuery = (sb as any)
     .from("players")
-    .select("uuid, username, status, color, settings, updated_at")
+    .select("uuid, username, status, color, settings, updated_at, status_expires_at, slowmode_seconds, is_online")
     .eq("server_id", params.server_id)
   if (since) playerQuery = playerQuery.gte("updated_at", since)
   const { data: players, error: playerError } = await playerQuery
@@ -169,10 +209,49 @@ export async function GET(
 
   let blockQuery = (sb as any)
     .from("blocked_players")
-    .select("uuid")
+    .select("uuid, expires_at")
     .eq("server_id", params.server_id)
   const { data: blocked, error: blockError } = await blockQuery
   if (blockError) return serverError()
+
+  // Aktive Warnungen (abgelaufen/zurueckgenommen zaehlen nicht).
+  const nowIso = new Date().toISOString()
+  const { data: warnings, error: warnError } = await (sb as any)
+    .from("player_warnings")
+    .select("player_uuid, created_at, expires_at")
+    .eq("server_id", params.server_id)
+    .is("revoked_at", null)
+    .gt("expires_at", nowIso)
+
+  if (warnError) return serverError()
+
+  const warnByPlayer = new Map<string, { count: number; updated_at: string }>()
+  for (const w of warnings ?? []) {
+    const uuid = w.player_uuid as string
+    if (!uuid) continue
+    const prev = warnByPlayer.get(uuid)
+    const created = (w.created_at as string) ?? nowIso
+    if (!prev) {
+      warnByPlayer.set(uuid, { count: 1, updated_at: created })
+    } else {
+      prev.count += 1
+      if (created > prev.updated_at) prev.updated_at = created
+    }
+  }
+  const warningRows = Array.from(warnByPlayer.entries()).map(([uuid, v]) => ({
+    uuid,
+    count: v.count,
+    level: Math.min(3, v.count),
+    updated_at: v.updated_at,
+  }))
+
+  const { data: presets, error: presetError } = await (sb as any)
+    .from("custom_presets")
+    .select("name, status, color, updated_at")
+    .eq("server_id", params.server_id)
+    .order("name", { ascending: true })
+
+  if (presetError) return serverError()
 
   let adminQuery = (sb as any)
     .from("audit_log")
@@ -184,9 +263,12 @@ export async function GET(
   if (adminError) return serverError()
 
   return ok({
+    mod_enabled: true,
     players: players ?? [],
     muted: muted ?? [],
     blocked: blocked ?? [],
+    warnings: warningRows,
+    presets: presets ?? [],
     admin_actions: adminActions ?? [],
     server_time: new Date().toISOString(),
   })

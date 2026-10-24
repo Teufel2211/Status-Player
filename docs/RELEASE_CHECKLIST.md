@@ -1,12 +1,12 @@
-# Release-Checkliste 1.4.1
+# Release-Checkliste 1.4.2
 
 Abhaken der Reihe nach. Alles auf `development` vorbereiten, erst ganz am Ende nach `main` mergen (CI feuert nur dort).
 
 ## 1. Code fertig
 
 - [ ] Alle Features/Fixes auf `development` committet, Baum sauber (`git status` leer)
-- [ ] `version.txt` = `1.4.1` **und** `StatusMod.VERSION` (`common/.../statusmod/StatusMod.java`) auf denselben Wert gesetzt — beide müssen identisch sein (`/status version` liest die Konstante)
-- [ ] `CHANGELOG.md` → `## Unreleased` in `## 1.4.1` umbenannt (kein Fleet in sichtbaren Texten!)
+- [ ] `version.txt` = `1.4.2` **und** `StatusMod.VERSION` (`common/.../statusmod/StatusMod.java`) auf denselben Wert gesetzt — beide müssen identisch sein (`/status version` liest die Konstante)
+- [ ] `CHANGELOG.md` → `## Unreleased` in `## 1.4.2` umbenannt (kein Fleet in sichtbaren Texten!)
 
 ## 2. Builds
 
@@ -18,6 +18,7 @@ Abhaken der Reihe nach. Alles auf `development` vorbereiten, erst ganz am Ende n
 
 - [ ] CI-Runtime-Matrix grün (alle Loader × alle MCs, MP-only auf Push)
 - [ ] Ingame-Test (Befehle, GUI-Klicks, Inventar prüfen) — **brauchst du**
+- [ ] Kill-Switch pro Server + global: `/status` verschwindet, `/modinfo` zeigt „deaktiviert", Status/Badge weg, Re-Enable binnen 15 s ohne Neustart — **brauchst du**
 - [ ] Dashboard-Build grün: `npm run build --prefix dashboard`
 
 ## 4. Tokens & Secrets
@@ -45,7 +46,7 @@ Abhaken der Reihe nach. Alles auf `development` vorbereiten, erst ganz am Ende n
 - [ ] `development` → `main` mergen (kein Push ohne Go!)
 - [ ] CI-Workflow grün (Build + Verify + Runtime-Tests)
 - [ ] Publish per `force_publish`-Dispatch anstoßen (nötig, da version.txt oft unverändert bleibt)
-- [ ] Modrinth: Uploads sichtbar (15 Gruppen), Version freigegeben
+- [ ] Modrinth: Uploads sichtbar (24 Gruppen), Version freigegeben
 - [ ] CurseForge: Dateien da, Freigabe abwarten
 - [ ] GitHub Release angelegt (Changelog aus CHANGELOG.md, alle 24 JARs)
 - [ ] Fleet NICHT im Release (Guard in `publish-all.ps1` bricht bei Fleetmod-JARs unter `dist/multiversion` ab)

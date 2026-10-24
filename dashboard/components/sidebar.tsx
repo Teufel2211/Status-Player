@@ -50,6 +50,12 @@ export default function Sidebar({ variant = "dashboard" }: { variant?: Variant }
     {
       title: "Konfiguration",
       items: [
+        ...(variant === "dashboard"
+          ? [
+              { href: `${base}/presets`, label: "Presets", icon: "★" },
+              { href: `${base}/moderation`, label: "Moderation", icon: "⚖" },
+            ]
+          : []),
         { href: `${base}/keys`, label: "API-Keys", icon: "⌨" },
         { href: `${base}/audit`, label: "Verlauf", icon: "◉" },
       ],

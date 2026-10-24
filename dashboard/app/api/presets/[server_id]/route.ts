@@ -28,10 +28,13 @@ export async function GET(
   return ok(data ?? [])
 }
 
+const MC_COLOR =
+  /^(reset|black|dark_blue|dark_green|dark_aqua|dark_red|dark_purple|gold|gray|dark_gray|blue|green|aqua|red|light_purple|yellow|white|rainbow|animated|#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}))$/i
+
 const PresetCreateSchema = z.object({
-  name: z.string().trim().min(1).max(32),
-  status: z.string().max(64),
-  color: z.string().max(32),
+  name: z.string().trim().min(1).max(32).regex(/^\S+$/, "Name darf keine Leerzeichen enthalten"),
+  status: z.string().trim().min(1).max(64),
+  color: z.string().trim().min(1).max(32).regex(MC_COLOR, "Ungültige Farbe"),
 })
 
 export async function POST(
@@ -49,7 +52,9 @@ export async function POST(
   try { body = await request.json() } catch { return badRequest() }
 
   const parsed = PresetCreateSchema.safeParse(body)
-  if (!parsed.success) return badRequest()
+  if (!parsed.success) {
+    return badRequest(parsed.error.issues[0]?.message ?? "Ungültige Anfrage")
+  }
 
   const sb = getServiceClient()
   const { error } = await (sb as any).from("custom_presets").upsert(
@@ -59,8 +64,9 @@ export async function POST(
       status: parsed.data.status,
       color: parsed.data.color,
       creator_uuid: session.sub,
+      updated_at: new Date().toISOString(),
     },
-    { onConflict: "server_id,name" }
+    { onConflict: "name,server_id" }
   )
 
   if (error) return serverError()
