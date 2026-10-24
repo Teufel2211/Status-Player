@@ -19,12 +19,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class StatusMod {
     public static final String MOD_ID = "statusmod";
     /** Bump on every GUI-fix round so running builds are identifiable via log + /status version. */
-    public static final String BUILD = "1.4.2-dev3";
+    public static final String BUILD = "1.4.2-dev4";
     /** Mod version for user-facing output + /bug reports. Bump together with version.txt at release prep. */
     public static final String VERSION = "1.4.2";
     private static final AtomicBoolean initialized = new AtomicBoolean(false);
     /** Vom Dashboard gesteuerter Kill-Switch (siehe SyncManager.pull). */
     private static volatile boolean remoteDisabled = false;
+    /** "global" oder "server": bestimmt die Chat-Meldung beim Join. */
+    private static volatile String remoteDisabledScope = "server";
     public static volatile ModConfig config;
     public static volatile SettingsStorage storage;
     public static volatile BlockedPlayers blockedPlayers;
@@ -44,6 +46,7 @@ public final class StatusMod {
         Platform platform = PlatformServices.getPlatform();
         config = ModConfig.load();
         remoteDisabled = config.remoteDisabled;
+        remoteDisabledScope = "global".equalsIgnoreCase(config.remoteDisabledScope) ? "global" : "server";
         storage = new SettingsStorage();
         blockedPlayers = new BlockedPlayers();
         mutedPlayers = new MutedPlayers();
@@ -73,16 +76,23 @@ public final class StatusMod {
         return remoteDisabled;
     }
 
+    /** "global" wenn alle Server abgeschaltet sind, sonst "server". */
+    public static String getRemoteDisabledScope() {
+        return remoteDisabledScope;
+    }
+
     /**
      * Setzt den Kill-Switch-Zustand und persistiert ihn in config.json.
      * Der Aufruf kommt aus dem Sync-Thread; config.save() ist atomar.
      */
-    public static void setRemoteDisabled(boolean disabled) {
-        if (remoteDisabled == disabled) return;
+    public static void setRemoteDisabled(boolean disabled, String scope) {
+        String normalized = disabled && "global".equalsIgnoreCase(scope) ? "global" : "server";
         remoteDisabled = disabled;
+        remoteDisabledScope = normalized;
         ModConfig cfg = config;
-        if (cfg != null) {
+        if (cfg != null && (cfg.remoteDisabled != disabled || !normalized.equals(cfg.remoteDisabledScope))) {
             cfg.remoteDisabled = disabled;
+            cfg.remoteDisabledScope = normalized;
             cfg.save();
         }
     }

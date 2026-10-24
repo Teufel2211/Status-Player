@@ -322,7 +322,12 @@ public final class SyncManager {
                 && json.get("mod_enabled").getAsJsonPrimitive().isBoolean()) {
             remoteEnabled = json.get("mod_enabled").getAsBoolean();
         }
-        applyRemoteEnabled(remoteEnabled);
+        String disableScope = "server";
+        if (json.has("mod_disabled_scope") && json.get("mod_disabled_scope").isJsonPrimitive()
+                && json.get("mod_disabled_scope").getAsJsonPrimitive().isString()) {
+            disableScope = json.get("mod_disabled_scope").getAsString();
+        }
+        applyRemoteEnabled(remoteEnabled, disableScope);
         if (!remoteEnabled) {
             lastPullInfo = "disabled";
             return;
@@ -593,17 +598,20 @@ public final class SyncManager {
      * Ausschalten sofort alle sichtbaren Status-Anzeigen ab. Beim Einschalten
      * werden die Status der Online-Spieler direkt neu gerendert.
      */
-    private static void applyRemoteEnabled(boolean enabled) {
+    private static void applyRemoteEnabled(boolean enabled, String scope) {
         boolean disabled = !enabled;
-        if (StatusMod.isRemoteDisabled() == disabled) return;
-        StatusMod.setRemoteDisabled(disabled);
+        boolean stateChanged = StatusMod.isRemoteDisabled() != disabled;
+        boolean scopeChanged = !StatusMod.getRemoteDisabledScope().equalsIgnoreCase(scope);
+        StatusMod.setRemoteDisabled(disabled, scope);
+        if (!stateChanged && !scopeChanged) return;
         MinecraftServer server = serverRef;
         if (server != null) {
             server.execute(() ->
                 com.teufel.statusmod.lifecycle.StatusLifecycle.onRemoteStateChanged(server, enabled));
         }
         System.out.println(disabled
-            ? "[StatusMod] Remote kill switch active: StatusMod disabled by dashboard."
+            ? "[StatusMod] Remote kill switch active: StatusMod disabled by dashboard (scope="
+                + StatusMod.getRemoteDisabledScope() + ")."
             : "[StatusMod] Remote kill switch released: StatusMod enabled by dashboard.");
     }
 

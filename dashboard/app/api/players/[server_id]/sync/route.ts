@@ -65,7 +65,8 @@ export async function POST(
     .eq("id", 1)
     .maybeSingle()
   if (serverRow.mod_enabled === false || fleetRow?.mod_enabled === false) {
-    return ok({ synced: 0, mod_enabled: false })
+    const mod_disabled_scope = fleetRow?.mod_enabled === false ? "global" : "server"
+    return ok({ synced: 0, mod_enabled: false, mod_disabled_scope })
   }
 
   let body: unknown
@@ -189,7 +190,8 @@ export async function GET(
   if (serverRow.mod_enabled === false || fleetRow?.mod_enabled === false) {
     // Nur das Flag liefern: der Mod ueberspringt die Datenverarbeitung und
     // laesst den Watermark stehen, damit Re-Enable den Rueckstand nachzieht.
-    return ok({ mod_enabled: false, server_time: new Date().toISOString() })
+    const mod_disabled_scope = fleetRow?.mod_enabled === false ? "global" : "server"
+    return ok({ mod_enabled: false, mod_disabled_scope, server_time: new Date().toISOString() })
   }
 
   let playerQuery = (sb as any)

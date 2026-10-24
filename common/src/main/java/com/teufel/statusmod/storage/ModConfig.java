@@ -71,6 +71,11 @@ public class ModConfig {
      * aktiv ist, bevor der erste Sync-Pull das Flag holt.
      */
     public boolean remoteDisabled = false;
+    /**
+     * "global" wenn der Fleet-Owner alle Server abgeschaltet hat, sonst
+     * "server". Steuert die Chat-Meldung beim Join.
+     */
+    public String remoteDisabledScope = "server";
 
     private static final Gson GSON = new Gson();
     // Pretty printer for config saves: one setting per line ("key": value).
@@ -198,6 +203,11 @@ public class ModConfig {
         else serverId = serverId.trim();
         if (apiKey == null) apiKey = "";
         else apiKey = stripQuotes(apiKey.trim());
+        if (remoteDisabledScope == null) remoteDisabledScope = "server";
+        else {
+            remoteDisabledScope = remoteDisabledScope.trim().toLowerCase();
+            if (!remoteDisabledScope.equals("global")) remoteDisabledScope = "server";
+        }
     }
 
     /** Removes surrounding quotes that sneak in via copy-paste (breaks key matching). */

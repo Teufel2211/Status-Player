@@ -103,7 +103,10 @@ public final class StatusLifecycle {
             // Kill-Switch: keine Status-Wiederherstellung, solange der Server
             // im Admin-Dashboard deaktiviert ist. Name/Activity oben bleiben
             // gepflegt, damit ein Re-Enable sofort korrekt rendert.
-            if (StatusMod.isRemoteDisabled()) return;
+            if (StatusMod.isRemoteDisabled()) {
+                sendRemoteDisabledMessage(player);
+                return;
+            }
             if (!cfg.restoreStatusOnJoin) {
                 settings.status = "";
                 settings.color = "reset";
@@ -155,6 +158,7 @@ public final class StatusLifecycle {
             if (!enabled) {
                 for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                     StatusTeamUtil.clearStatus(server.getScoreboard(), player);
+                    sendRemoteDisabledMessage(player);
                 }
                 com.teufel.statusmod.display.StatusBossBar.hide();
                 com.teufel.statusmod.display.StatusSidebar.hide(server);
@@ -170,6 +174,14 @@ public final class StatusLifecycle {
         } catch (Throwable e) {
             System.err.println("[StatusMod] Failed to apply remote kill switch: " + e.getMessage());
         }
+    }
+
+    private static void sendRemoteDisabledMessage(ServerPlayer player) {
+        if (player == null) return;
+        String text = "global".equalsIgnoreCase(StatusMod.getRemoteDisabledScope())
+            ? "§c[StatusMod] Die Status Player Mod wurde auf allen Servern deaktiviert. Bitte schauen Sie im Discord nach dem Grund."
+            : "§c[StatusMod] Dieser Server wurde vom Owner der Status Player Mod deaktiviert. Kontaktieren Sie den Owner, um den Grund zu erfahren und die Mod wieder zu aktivieren.";
+        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(text));
     }
 
     public static void markActive(ServerPlayer player) {
