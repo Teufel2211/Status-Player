@@ -13,6 +13,7 @@ All notable changes to this project are documented in this file.
 - `/bug` now accepts up to 3 screenshots per report: attach them in-game (screenshot picker) or upload them in the browser via the link in chat (works for vanilla clients and Bedrock players too). Images show up as thumbnails in the dashboard inbox.
 - New keybind (default `U`) opens the `/status` menu. Rebindable under Options → Controls → Key Binds → StatusMod.
 - Admin kill switch: disable StatusMod per server or for the whole fleet from the admin dashboard. While disabled, status display, AFK, moderation, commands and sync push are off; the mod keeps polling, so re-enabling applies within 15 seconds without a restart. `/modinfo` still reports the state.
+- Kill switch chat notice: when StatusMod is disabled, players see why (per-server owner notice or fleet-wide Discord pointer) on join and immediately when the switch changes.
 
 ## 1.4.1 - 2026-10-15
 

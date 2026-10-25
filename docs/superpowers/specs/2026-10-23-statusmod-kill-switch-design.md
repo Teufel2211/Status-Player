@@ -62,20 +62,31 @@ Body: `{ "mod_enabled": boolean }`
 
 Liefert immer `mod_enabled` (effektiv aus Server- und globalem Flag).
 Ist der Effektivwert `false`, antwortet die Route nur mit
-`{ "mod_enabled": false, "server_time": "..." }`. Der Mod verarbeitet dann
-keine Spieldaten und lässt den Sync-Watermark unangetastet; nach dem
-Re-Enable wird der Rückstand nachgezogen.
+`{ "mod_enabled": false, "mod_disabled_scope": "server" | "global", "server_time": "..." }`.
+`global` gewinnt, sobald `fleet_config.mod_enabled = false`; sonst ist der
+Scope `server`. Der Mod verarbeitet dann keine Spieldaten und lässt den
+Sync-Watermark unangetastet; nach dem Re-Enable wird der Rückstand nachgezogen.
 
 ### `POST /api/players/[server_id]/sync`
 
 Ist der Effektivwert `false`, werden keine Schreibvorgänge ausgeführt:
-`{ "synced": 0, "mod_enabled": false }`. Schützt vor einem Mod, der das
-Flag noch nicht geholt hat.
+`{ "synced": 0, "mod_enabled": false, "mod_disabled_scope": "server" | "global" }`.
+Schützt vor einem Mod, der das Flag noch nicht geholt hat.
 
 ## Mod-Verhalten
 
 - `ModConfig.remoteDisabled` wird persistiert, damit ein Neustart nicht für
   bis zu 15 Sekunden wieder aktiv ist.
+- `ModConfig.remoteDisabledScope` wird ebenfalls persistiert (`server` oder
+  `global`), damit die Chat-Meldung nach einem Neustart sofort stimmt.
+- Chat-Hinweis bei Deaktivierung: Beim Join sowie sofort für alle Online-
+  Spieler beim Umschalten (auch bei einem Scope-Wechsel) erscheint eine rote
+  `[StatusMod]`-Meldung:
+  - pro Server: „Dieser Server wurde vom Owner der Status Player Mod
+    deaktiviert. Kontaktieren Sie den Owner, um den Grund zu erfahren und die
+    Mod wieder zu aktivieren.“
+  - global: „Die Status Player Mod wurde auf allen Servern deaktiviert.
+    Bitte schauen Sie im Discord nach dem Grund.“
 - Beim Ausschalten: Status-Teams aller Online-Spieler entfernen, Bossbar und
   Sidebar ausblenden, ein Logeintrag.
 - Beim Einschalten: Status/Badges aller Online-Spieler sofort neu anwenden,
