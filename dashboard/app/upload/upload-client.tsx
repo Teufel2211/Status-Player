@@ -234,7 +234,7 @@ export default function UploadClient() {
   return (
     <div>
       <div className="mb-6">
-        <div className="kicker mb-2">StatusMod · Bug-Meldung</div>
+        <div className="kicker mb-2">Status Player · Bug-Meldung</div>
         <h1 className="font-display font-bold text-3xl" style={{ color: "var(--text-primary)" }}>
           Bilder anhängen
         </h1>

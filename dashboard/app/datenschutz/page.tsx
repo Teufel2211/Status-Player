@@ -2,8 +2,8 @@ import type { Metadata } from "next"
 import LegalLayout from "@/components/legal-layout"
 
 export const metadata: Metadata = {
-  title: "Datenschutzerklärung — StatusMod Dashboard",
-  description: "Datenschutzerklärung für das StatusMod Dashboard",
+  title: "Datenschutzerklärung — Status Player Dashboard",
+  description: "Datenschutzerklärung für das Status Player Dashboard",
 }
 
 export default function DatenschutzPage() {
@@ -12,7 +12,7 @@ export default function DatenschutzPage() {
       <h2>1. Verantwortlicher</h2>
       <p>
         Verantwortlicher für die Datenverarbeitung im Sinne der Datenschutz-Grundverordnung (DSGVO) ist der Betreiber
-        des StatusMod-Dashboards. Die Kontaktdaten finden sich im <a href="/impressum">Impressum</a>.
+        des Status Player Dashboards. Die Kontaktdaten finden sich im <a href="/impressum">Impressum</a>.
       </p>
 
       <h2>2. Allgemeine Hinweise</h2>

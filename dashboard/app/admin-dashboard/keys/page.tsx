@@ -37,7 +37,7 @@ export default function AdminKeysPage() {
       <div className="mb-6">
         <div className="kicker mb-2">Admin-Dashboard · {active.length} aktiv</div>
         <h1 className="font-display font-bold text-3xl" style={{ color: "var(--text-primary)" }}>API-Keys</h1>
-        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>Alle aktiven Zugangsschlüssel der Flotte — abgelaufene und widerrufene sind ausgeblendet.</p>
+        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>Alle aktiven Zugangsschlüssel aller Server — abgelaufene und widerrufene sind ausgeblendet.</p>
       </div>
 
       {loading ? (

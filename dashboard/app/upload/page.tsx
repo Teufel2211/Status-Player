@@ -4,7 +4,7 @@ import Footer from "@/components/footer"
 import UploadClient from "./upload-client"
 
 export const metadata: Metadata = {
-  title: "Bug-Bilder anhängen — StatusMod",
+  title: "Bug-Bilder anhängen — Status Player",
   robots: { index: false, follow: false },
 }
 

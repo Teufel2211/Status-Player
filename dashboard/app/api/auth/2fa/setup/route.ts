@@ -37,7 +37,8 @@ export async function POST(request: Request) {
 
   const secret = generateSecret()
 
-  const otpauth = `otpauth://totp/StatusMod:${encodeURIComponent(session.sub)}?secret=${secret}&issuer=StatusMod&algorithm=SHA1&digits=6&period=30`
+  const issuer = "Status Player"
+  const otpauth = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(session.sub)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`
 
   const encryptedSecret = encryptSecret(secret)
 

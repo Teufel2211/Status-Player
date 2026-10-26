@@ -189,7 +189,7 @@ export default function AdminOverviewPage() {
   async function toggleGlobalMod() {
     const next = !globalModEnabled
     if (!next && !window.confirm(
-      "StatusMod auf allen Servern deaktivieren? Status-Anzeige, Befehle und Sync werden sofort gestoppt (greift nach max. 15 s)."
+      "Status Player auf allen Servern deaktivieren? Status-Anzeige, Befehle und Sync werden sofort gestoppt (greift nach max. 15 s)."
     )) return
     setBulkModBusy(true)
     try {
@@ -206,7 +206,7 @@ export default function AdminOverviewPage() {
   async function toggleServerMod(s: FleetServer) {
     const next = s.mod_enabled === false
     if (!next && !window.confirm(
-      `StatusMod auf Server ${s.id.slice(0, 8)} deaktivieren? Status-Anzeige, Befehle und Sync werden sofort gestoppt (greift nach max. 15 s).`
+      `Status Player auf Server ${s.id.slice(0, 8)} deaktivieren? Status-Anzeige, Befehle und Sync werden sofort gestoppt (greift nach max. 15 s).`
     )) return
     setModBusyId(s.id)
     try {
@@ -378,9 +378,9 @@ export default function AdminOverviewPage() {
 
       <div className="mb-8">
         <SectionHead
-          kicker="Flotte"
+          kicker="Alle Server"
           title="Alle Server"
-          sub="Jeder Server meldet sich automatisch beim ersten Setup. StatusMod lässt sich pro Server oder global stilllegen."
+          sub="Jeder Server meldet sich automatisch beim ersten Setup. Status Player lässt sich pro Server oder global stilllegen."
         />
         {loading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -398,7 +398,7 @@ export default function AdminOverviewPage() {
             >
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-display font-semibold text-sm" style={{ color: "var(--text-primary)" }}>StatusMod global</span>
+                  <span className="font-display font-semibold text-sm" style={{ color: "var(--text-primary)" }}>Status Player global</span>
                   {globalModEnabled
                     ? <span className="badge-green text-[10px]">Aktiv</span>
                     : <span className="badge-red text-[10px]">Alle Server aus</span>}
@@ -450,7 +450,7 @@ export default function AdminOverviewPage() {
                     <div className="flex items-center justify-between gap-3 mt-4 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>StatusMod</span>
+                          <span className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>Status Player</span>
                           {effective
                             ? <span className="badge-green text-[10px]">Aktiv</span>
                             : <span className="badge-red text-[10px]">{globalModEnabled ? "Deaktiviert" : "Global aus"}</span>}
@@ -461,7 +461,7 @@ export default function AdminOverviewPage() {
                         type="button"
                         role="switch"
                         aria-checked={s.mod_enabled !== false}
-                        aria-label={`StatusMod auf Server ${s.id.slice(0, 8)} ${s.mod_enabled === false ? "aktivieren" : "deaktivieren"}`}
+                        aria-label={`Status Player auf Server ${s.id.slice(0, 8)} ${s.mod_enabled === false ? "aktivieren" : "deaktivieren"}`}
                         disabled={!globalModEnabled || bulkModBusy || modBusyId === s.id}
                         onClick={() => toggleServerMod(s)}
                         className="relative shrink-0 rounded-full transition-colors disabled:opacity-40"
@@ -493,7 +493,7 @@ export default function AdminOverviewPage() {
       </div>
 
       <div className="mb-8">
-        <SectionHead kicker="Verwaltung" title="Presets & Verteilung" sub="Schnellauswahl für deinen Server und Verbindungsdaten für die ganze Flotte." />
+        <SectionHead kicker="Verwaltung" title="Presets & Verteilung" sub="Schnellauswahl für deinen Server und Verbindungsdaten für alle Server." />
         <div className="grid lg:grid-cols-2 gap-4 items-start">
           <div className="card">
             <h3 className="font-display font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Presets</h3>
@@ -544,7 +544,7 @@ export default function AdminOverviewPage() {
           <div className="card">
             <h3 className="font-display font-semibold mb-1" style={{ color: "var(--text-primary)" }}>Verteilung</h3>
             <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
-              Verbindungsdaten für alle Server der Flotte. Mods holen sie sich automatisch beim Start.
+              Verbindungsdaten für alle Server. Mods holen sie sich automatisch beim Start.
             </p>
             <form onSubmit={saveFleet} className="space-y-3">
               <div>

@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     (sb as any).from("fleet_config").select("mod_enabled").eq("id", 1).maybeSingle(),
   ])
   if (serverRow?.mod_enabled === false || fleetRow?.mod_enabled === false) {
-    return forbidden("StatusMod ist für diesen Server deaktiviert.")
+    return forbidden("Status Player ist für diesen Server deaktiviert.")
   }
 
   // Upload-Code pro Meldung (30 Min gültig). In der DB liegt nur der Hash;

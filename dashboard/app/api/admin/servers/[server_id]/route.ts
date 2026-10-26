@@ -6,7 +6,7 @@ import { writeAuditLog } from "@/lib/audit"
 
 export const dynamic = "force-dynamic"
 
-// Server-Kill-Switch: StatusMod nur fuer diesen Server deaktivieren.
+// Server-Kill-Switch: Status Player nur fuer diesen Server deaktivieren.
 export async function PATCH(
   request: Request,
   { params }: { params: { server_id: string } }
@@ -15,7 +15,7 @@ export async function PATCH(
 
   const session = requireSession(request)
   if (!session) return unauthorized()
-  if (session.role !== "owner") return forbidden("Nur der Owner kann StatusMod deaktivieren")
+  if (session.role !== "owner") return forbidden("Nur der Owner kann Status Player deaktivieren")
 
   let body: unknown
   try { body = await request.json() } catch { return badRequest() }

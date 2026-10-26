@@ -2,8 +2,8 @@ import type { Metadata } from "next"
 import LegalLayout from "@/components/legal-layout"
 
 export const metadata: Metadata = {
-  title: "Nutzungsbedingungen — StatusMod Dashboard",
-  description: "Nutzungsbedingungen für das StatusMod Dashboard",
+  title: "Nutzungsbedingungen — Status Player Dashboard",
+  description: "Nutzungsbedingungen für das Status Player Dashboard",
 }
 
 export default function NutzungsbedingungenPage() {
@@ -11,7 +11,7 @@ export default function NutzungsbedingungenPage() {
     <LegalLayout title="Nutzungsbedingungen" updated="31. Juli 2026">
       <h2>1. Zweck des Dienstes</h2>
       <p>
-        Der StatusMod-Dienst stellt eine Verbindung zwischen einem Minecraft-Server und einem webbasierten Dashboard
+        Der Dienst von Status Player stellt eine Verbindung zwischen einem Minecraft-Server und einem webbasierten Dashboard
         her. Er ermöglicht die Verwaltung von Statusanzeigen, Spielerinformationen und Shop-Funktionen. Die folgenden
         Bedingungen regeln die Nutzung des Dienstes durch Serverbetreiber und Nutzer.
       </p>
@@ -19,7 +19,7 @@ export default function NutzungsbedingungenPage() {
       <h2>2. Voraussetzungen für die Nutzung</h2>
       <ul>
         <li>Du musst mindestens 18 Jahre alt oder mit Einwilligung deiner gesetzlichen Vertreter handlungsfähig sein.</li>
-        <li>Du benötigst einen Minecraft-Server, auf dem der StatusMod-Mod installiert ist.</li>
+        <li>Du benötigst einen Minecraft-Server, auf dem der Status Player Mod installiert ist.</li>
         <li>Du musst berechtigt sein, den jeweiligen Server zu verwalten.</li>
       </ul>
 
@@ -67,7 +67,7 @@ export default function NutzungsbedingungenPage() {
 
       <h2>9. Rechte von Dritten</h2>
       <p>
-        Minecraft ist eine Marke von Mojang Synergies AB. Der StatusMod-Dienst ist ein unabhängiges Projekt und steht
+        Minecraft ist eine Marke von Mojang Synergies AB. Der Dienst von Status Player ist ein unabhängiges Projekt und steht
         in keiner Verbindung zu Mojang oder Microsoft und wird von diesen nicht unterstützt.
       </p>
 

@@ -48,8 +48,8 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
           <div className="kicker mb-2">Admin-Dashboard</div>
           <h1 className="font-display font-bold text-2xl mb-2" style={{ color: "var(--text-primary)" }}>Kein Zugriff</h1>
           <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
-            Dieser Bereich ist nur für den Owner. Erzeuge mit <span className="font-mono">/fleet owner-code</span> in
-            der Server-Konsole einen Owner-Code und melde dich damit an.
+            Dieser Bereich ist nur für den Owner. Erzeuge in der Server-Konsole einen Owner-Code und melde dich
+            damit an.
           </p>
           <div className="flex gap-2 justify-center">
             <a href="/dashboard" className="btn-secondary text-sm">Zum Dashboard</a>

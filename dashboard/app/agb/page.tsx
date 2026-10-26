@@ -2,8 +2,8 @@ import type { Metadata } from "next"
 import LegalLayout from "@/components/legal-layout"
 
 export const metadata: Metadata = {
-  title: "AGB — StatusMod Dashboard",
-  description: "Allgemeine Geschäftsbedingungen für StatusMod",
+  title: "AGB — Status Player Dashboard",
+  description: "Allgemeine Geschäftsbedingungen für Status Player",
 }
 
 export default function AGBPage() {
@@ -11,13 +11,13 @@ export default function AGBPage() {
     <LegalLayout title="Allgemeine Geschäftsbedingungen (AGB)" updated="31. Juli 2026">
       <h2>1. Geltungsbereich</h2>
       <p>
-        Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für die Nutzung des StatusMod-Dashboards und der damit
+        Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für die Nutzung des Status Player Dashboards und der damit
         verbundenen Dienste (im Folgenden „Dienst"). Mit der Nutzung des Dienstes erkennt der Nutzer diese AGB an.
       </p>
 
       <h2>2. Beschreibung des Dienstes</h2>
       <p>
-        StatusMod ist ein Minecraft-Mod, der es Serverbetreibern ermöglicht, Statusanzeigen, Spielerinformationen und
+        Status Player ist ein Minecraft-Mod, der es Serverbetreibern ermöglicht, Statusanzeigen, Spielerinformationen und
         Shop-Funktionen für ihren Minecraft-Server über ein webbasiertes Dashboard zu verwalten. Der Dienst stellt die
         Verbindung zwischen dem Minecraft-Server und dem Dashboard her.
       </p>

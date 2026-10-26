@@ -69,7 +69,7 @@ export default function Sidebar({ variant = "dashboard" }: { variant?: Variant }
           <div className="w-9 h-9 rounded-xl flex items-center justify-center font-display font-bold" style={{ backgroundColor: "var(--accent)", color: "var(--accent-fg)" }}>
             S
           </div>
-          <div className="font-display font-bold leading-none" style={{ color: "var(--text-primary)" }}>StatusMod</div>
+          <div className="font-display font-bold leading-none" style={{ color: "var(--text-primary)" }}>Status Player</div>
         </Link>
       </div>
 

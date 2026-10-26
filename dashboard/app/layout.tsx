@@ -3,7 +3,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 
 export const metadata: Metadata = {
-  title: "StatusMod Dashboard",
+  title: "Status Player Dashboard",
   description: "Verwalte Status und Spieler deines Minecraft-Servers",
 }
 

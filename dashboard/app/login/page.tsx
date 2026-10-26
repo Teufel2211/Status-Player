@@ -67,7 +67,7 @@ export default function LoginPage() {
           </h1>
           <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
             {ownerMode
-              ? "Erzeuge mit /fleet owner-code in der Server-Konsole deinen Owner-Code."
+              ? "Erzeuge in der Server-Konsole mit dem Owner-Code-Befehl deines Servers einen Owner-Code."
               : "Hol dir mit /code im Spiel deinen Login-Code."}
           </p>
 

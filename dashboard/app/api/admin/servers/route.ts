@@ -6,12 +6,12 @@ import { writeAuditLog } from "@/lib/audit"
 
 export const dynamic = "force-dynamic"
 
-// Globaler Kill-Switch: StatusMod auf allen Servern der Flotte deaktivieren.
+// Globaler Kill-Switch: Status Player auf allen Servern deaktivieren.
 // Der effektive Zustand ist global && server (siehe /api/servers/[id]/sync).
 export async function PATCH(request: Request) {
   const session = requireSession(request)
   if (!session) return unauthorized()
-  if (session.role !== "owner") return forbidden("Nur der Owner kann StatusMod deaktivieren")
+  if (session.role !== "owner") return forbidden("Nur der Owner kann Status Player deaktivieren")
 
   let body: unknown
   try { body = await request.json() } catch { return badRequest() }

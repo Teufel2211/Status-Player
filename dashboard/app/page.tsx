@@ -8,11 +8,11 @@ export default function LandingPage() {
         <div className="text-center max-w-xl w-full">
           <div className="inline-flex items-center gap-2.5 mb-6 px-4 py-1.5 rounded-full font-mono text-xs tracking-widest uppercase" style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
             <span className="pulse-dot" />
-            StatusMod · Server-Ops
+            Status Player · Server-Ops
           </div>
 
           <h1 className="font-display font-bold leading-[0.98] mb-4" style={{ color: "var(--text-primary)", fontSize: "clamp(2.5rem, 7vw, 4.5rem)" }}>
-            StatusMod
+            Status Player
           </h1>
 
           <p className="mb-8 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
