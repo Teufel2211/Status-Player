@@ -378,7 +378,7 @@ export default function AdminOverviewPage() {
 
       <div className="mb-8">
         <SectionHead
-          kicker="Alle Server"
+          kicker="Global"
           title="Alle Server"
           sub="Jeder Server meldet sich automatisch beim ersten Setup. Status Player lässt sich pro Server oder global stilllegen."
         />
