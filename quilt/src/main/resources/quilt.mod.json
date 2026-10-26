@@ -5,13 +5,18 @@
     "id": "statusmod",
     "version": "${version}",
     "metadata": {
-      "name": "Status Mod",
+      "name": "Status Player",
       "description": "Lightweight player status tags - Online, AFK, DND, Offline",
       "icon": "assets/statusmod/icon.png",
       "contributors": {
         "teufel": "Owner"
       },
       "license": "MIT",
+      "contact": {
+        "homepage": "https://modrinth.com/mod/status-player",
+        "sources": "https://github.com/Teufel2211/Status-Player",
+        "issues": "https://github.com/Teufel2211/Status-Player/issues"
+      },
       "environment": "*"
     },
     "entrypoints": {

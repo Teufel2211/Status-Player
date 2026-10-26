@@ -1,14 +1,16 @@
 modLoader="javafml"
 loaderVersion="[1,)"
 license="MIT"
+issueTrackerURL="https://github.com/Teufel2211/Status-Player/issues"
 
 [[mods]]
 modId="statusmod"
 version="${version}"
-displayName="Status Mod"
+displayName="Status Player"
 description="Lightweight player status tags - Online, AFK, DND, Offline"
 logo="logo.png"
 logoFile="logo.png"
+displayURL="https://modrinth.com/mod/status-player"
 
 [[dependencies.statusmod]]
 modId="minecraft"

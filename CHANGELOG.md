@@ -19,11 +19,13 @@ Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improve
 
 ### Changed
 
+- Display name: the mod now appears as **Status Player** in the mod list instead of **Status Mod**.
 - Kill switch chat notice: when StatusMod is disabled, players see why (per-server owner notice or global Discord pointer) on join and immediately when the switch changes.
 
 ### Improved
 
 - `/bug` now accepts up to 3 screenshots per report: attach them in-game (screenshot picker) or upload them in the browser via the link in chat (works for vanilla clients and Bedrock players too). Images show up as thumbnails in the dashboard inbox.
+- Mod menu links: the Website and Issues buttons now open the Modrinth project page and the GitHub issue tracker instead of being greyed out.
 
 ## 1.4.1 - 2026-10-15
 
