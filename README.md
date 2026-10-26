@@ -1,6 +1,6 @@
-# StatusMod
+# Status Player
 
-StatusMod adds lightweight status tags for players on Minecraft servers and clients.
+Status Player adds lightweight status tags for players on Minecraft servers and clients.
 Players can set a custom status text and color that is shown in the player list (TAB) and above their name.
 
 ## Highlights
