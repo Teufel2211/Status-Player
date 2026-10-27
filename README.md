@@ -60,10 +60,12 @@ Players can set a custom status text and color that is shown in the player list 
 
 | Loader | Minecraft versions |
 |--------|-------------------|
-| Fabric | 1.19 - 1.21.11, 26.1 - 26.2 |
-| Forge | 1.19 - 25.x, 26.1 - 26.2 |
-| NeoForge | 1.21+ |
-| Quilt | 1.21.11, 26.1 - 26.2 |
+| Fabric | 1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, 26.3 |
+| Forge | 1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, 26.3 |
+| NeoForge | 1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, 26.3 |
+| Quilt | 1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, 26.3 |
+
+That is 24 builds (4 loaders × 6 Minecraft versions).
 
 ## Configuration
 

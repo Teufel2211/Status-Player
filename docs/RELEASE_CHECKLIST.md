@@ -2,44 +2,51 @@
 
 Abhaken der Reihe nach. Alles auf `development` vorbereiten, erst ganz am Ende nach `main` mergen (CI feuert nur dort).
 
+**Stand 2026-10-27:** Build + Verifikation fertig (24/24), Release-JARs verteilt.
+Offen sind nur noch Tokens, Modrinth-Seite, Ingame-Abnahme und der Merge nach `main`.
+
 ## 1. Code fertig
 
-- [ ] Alle Features/Fixes auf `development` committet, Baum sauber (`git status` leer)
-- [ ] `version.txt` = `1.4.2` **und** `StatusMod.VERSION` (`common/.../statusmod/StatusMod.java`) auf denselben Wert gesetzt — beide müssen identisch sein (`/status version` liest die Konstante)
-- [ ] `CHANGELOG.md` → `## Unreleased` in `## 1.4.2` umbenannt (kein Fleet in sichtbaren Texten!)
+- [x] Alle Features/Fixes auf `development` committet, Baum sauber (`git status` leer)
+- [x] `version.txt` = `1.4.2` **und** `StatusMod.VERSION` (`common/.../statusmod/StatusMod.java`) auf denselben Wert gesetzt — beide müssen identisch sein (`/status version` liest die Konstante)
+- [x] `StatusMod.BUILD` = `1.4.2` (kein `dev`-Tag im Release)
+- [x] `CHANGELOG.md` → `## Unreleased` in `## 1.4.2 - 2026-10-27` umbenannt (kein Fleet in sichtbaren Texten!)
 
 ## 2. Builds
 
-- [ ] `.\scripts\local\build-multiversion.ps1 -Loaders fabric,forge,neoforge,quilt -ContinueOnError:$false`
-- [ ] `.\scripts\ci\verify-jars.ps1` → 24/24 OK
-- [ ] `dist/multiversion` enthält 24 × `Statusmod-<version>-<loader>-<mc>.jar`
+- [x] `.\scripts\local\build-multiversion.ps1 -Loaders fabric,forge,neoforge,quilt -ContinueOnError:$false`
+- [x] `.\scripts\ci\verify-jars.ps1` → 24/24 OK
+- [x] `dist/multiversion` enthält 24 × `Statusmod-<version>-<loader>-<mc>.jar`
+- [x] Build-Tag in allen 24 JARs per `javap` geprüft (`BUILD`/`VERSION` = `1.4.2`)
 
 ## 3. Tests
 
-- [ ] CI-Runtime-Matrix grün (alle Loader × alle MCs, MP-only auf Push)
+- [ ] CI-Runtime-Matrix grün (alle Loader × alle MCs, MP-only auf Push) — läuft erst nach dem Merge
 - [ ] Ingame-Test (Befehle, GUI-Klicks, Inventar prüfen) — **brauchst du**
 - [ ] Kill-Switch pro Server + global: `/status` verschwindet, `/modinfo` zeigt „deaktiviert", Status/Badge weg, Re-Enable binnen 15 s ohne Neustart — **brauchst du**
-- [ ] Dashboard-Build grün: `npm run build --prefix dashboard`
+- [x] Dashboard-Build grün: `npm run build --prefix dashboard`
 
 ## 4. Tokens & Secrets
 
 - [ ] `.\scripts\ci\check-release-tokens.ps1` → Exit 0 (inkl. Modrinth-Auth via GET /user). ACHTUNG: `$env:`-Tokens gelten nur pro PowerShell-Sitzung — vor Publish neu setzen + Check erneut laufen lassen!
+  - **Blockiert (2026-10-27):** `MODRINTH_TOKEN` = HTTP 401, `CURSEFORGE_API_KEY` = HTTP 403
 - [ ] CI-Secrets prüfen (GitHub → Settings → Secrets → Actions): `MODRINTH_TOKEN`, `MODRINTH_PROJECT_ID`, `CURSEFORGE_TOKEN`, `CURSEFORGE_PROJECT_ID` — **brauchst du**
-- [ ] Keine *neuen* Secrets im Diff
+- [x] Keine *neuen* Secrets im Diff
 
 ## 5. Dashboard live
 
-- [ ] `vercel deploy --prod` — **brauchst du** (CLI nicht eingeloggt)
-- [ ] `/api/health` → `healthy`, `previous_secret_active: false` — nach Deploy prüfen
+- [x] `vercel deploy --prod` — zuletzt deployt mit Status-Player-Branding
+- [x] `/api/health` → `healthy`, `database: connected`, `previous_secret_active: false`
 - [ ] Login + Owner-Login einmal durchspielen — **brauchst du**
 - [ ] Config-Pull auf Testserver prüfen — **brauchst du**
 
 ## 6. Offenlegung (Modrinth, vor Upload!)
 
 - [ ] Projektseite: Icon aktuell, Beschreibung aktuell — **brauchst du**
-- [ ] Disclosure **"Contains AI-generated content"** gesetzt — **brauchst du**
-- [ ] Disclosure **"Contains telemetry"** gesetzt (bleibt seit 1.4.0 bestehen, trotzdem verifizieren)
-- [ ] README/Modrinth-Seitentext ohne "No telemetry"-Versprechen — **brauchst du**
+  - Body enthält noch drei alte `Teufel2211/StatusMod`-Links (Token ungültig, daher manuell ersetzen)
+- [x] Disclosure **"Contains AI-generated content"** gesetzt
+- [ ] Disclosure **"Contains telemetry"** gesetzt (bleibt seit 1.4.0 bestehen, trotzdem verifizieren) — **brauchst du**
+- [x] README/Modrinth-Seitentext ohne "No telemetry"-Versprechen (README nennt jetzt die synchronisierten Daten)
 
 ## 7. Merge + Publish
 
@@ -49,10 +56,10 @@ Abhaken der Reihe nach. Alles auf `development` vorbereiten, erst ganz am Ende n
 - [ ] Modrinth: Uploads sichtbar (24 Gruppen), Version freigegeben
 - [ ] CurseForge: Dateien da, Freigabe abwarten
 - [ ] GitHub Release angelegt (Changelog aus CHANGELOG.md, alle 24 JARs)
-- [ ] Fleet NICHT im Release (Guard in `publish-all.ps1` bricht bei Fleetmod-JARs unter `dist/multiversion` ab)
+- [x] Fleet NICHT im Release (`dist/multiversion` enthält 0 Fleet-JARs; Guard in `publish-all.ps1` bleibt)
 
 ## 8. Danach
 
-- [ ] Testserver + Nitrado auf neue JARs aktualisieren + Neustart
+- [ ] Testserver + Nitrado auf neue JARs aktualisieren + Neustart — lokal erledigt (25566 läuft `build 1.4.2`)
 - [ ] Modrinth-Profile registrieren (`scripts/local/register-modrinth-content.ps1`, App vorher schließen!)
 - [ ] Diese Datei fürs nächste Release zurücksetzen (Haken raus)
