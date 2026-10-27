@@ -14,7 +14,7 @@ import java.util.Iterator;
 import java.util.Map;
 
 public class ModConfig {
-    public int adminOpLevel = 2;
+    public int adminOpLevel = 4;
     public String statusPermissionNode = "statusmod.use";
     public String adminPermissionNode = "statusmod.admin";
     public boolean enableAdminOverrides = true;

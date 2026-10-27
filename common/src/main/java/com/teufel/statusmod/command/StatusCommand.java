@@ -693,7 +693,14 @@ public class StatusCommand {
      * Helps diagnosing 401s (wrong key/server) without touching files.
      */
     private static void showVersion(CommandSourceStack src) {
-        CommandUtil.sendSuccess(src, Component.literal("StatusMod " + StatusMod.VERSION + " (build " + StatusMod.BUILD + ")"), false);
+        // Checked in the executor on purpose: a .requires gate on the literal
+        // would let non-admins fall through to the greedy /status <text>
+        // argument and set a status named "version" instead.
+        if (!PermissionUtil.hasAdminPermission(src)) {
+            src.sendFailure(Component.literal("Du hast nicht genügend Rechte."));
+            return;
+        }
+        CommandUtil.sendSuccess(src, Component.literal("Status Player " + StatusMod.VERSION + " (build " + StatusMod.BUILD + ")"), false);
     }
 
     private static void showSyncStatus(CommandSourceStack src) {

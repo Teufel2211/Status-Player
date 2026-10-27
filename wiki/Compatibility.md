@@ -18,7 +18,7 @@ StatusMod builds for four loaders across six Minecraft versions (24 JARs):
 - Java: 1.21.11 = Java 21 (class file 65); 26.x = Java 25.
 - Bedrock players via Geyser/Floodgate: tab-list prefixes don't reach Bedrock (protocol limitation) — use `/status list`, boss bar/action bar and sidebar instead (see [Commands](Commands)). Floodgate on MC 26.3 warns: no compatible Geyser release yet.
 - Forge 26.1 via third-party launchers (Modrinth/Prism) can crash in `FireBlock` bootstrap — upstream Forge issue, also happens vanilla. Use the official installer pipeline or 26.1.1+.
-- LuckyPerms (if installed): `statusmod.use` / `statusmod.admin`. Without it, everyone may use `/status`, OP level (`adminOpLevel`, default 2) gates admin commands.
+- LuckyPerms (if installed): `statusmod.use` / `statusmod.admin`. Without it, everyone may use `/status`, OP level (`adminOpLevel`, default 4) gates admin commands.
 
 ## Build inputs
 

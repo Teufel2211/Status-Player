@@ -1,6 +1,6 @@
 # Commands
 
-Legend: `(admin)` needs OP level (default 2, see `adminOpLevel`) or the `statusmod.admin` permission. Everything else needs `statusmod.use` (granted to everyone when no permission plugin is installed).
+Legend: `(admin)` needs OP level (default 4, see `adminOpLevel`) or the `statusmod.admin` permission. Everything else needs `statusmod.use` (granted to everyone when no permission plugin is installed).
 
 ## Status
 

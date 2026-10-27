@@ -808,10 +808,10 @@ try {
     Start-Sleep -Seconds 3
 
     # Send /modinfo via console stdin, wait for the mod response.
-    # 'StatusMod — Informationen' -- the em-dash is non-ASCII and gets mangled
-    # by the stdout decode chain (varies per run), so allow a generous number
-    # of arbitrary characters between the two words.
-    $infoOk = Send-ServerCommand -Process $serverProc -Command "modinfo" -ExpectPattern "StatusMod.{0,20}Informationen" -LogFile $stdoutFile -TimeoutSec 30
+    # 'Status Player — Informationen' -- the em-dash is non-ASCII and gets
+    # mangled by the stdout decode chain (varies per run), so allow a generous
+    # number of arbitrary characters between the two words.
+    $infoOk = Send-ServerCommand -Process $serverProc -Command "modinfo" -ExpectPattern "Status Player.{0,20}Informationen" -LogFile $stdoutFile -TimeoutSec 30
     if (-not $infoOk) {
         throw "No /modinfo response in server log. Last lines:`n" + ((Get-LastLogLines $stdoutFile) -join "`n")
     }

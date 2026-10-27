@@ -29,10 +29,14 @@ public final class CodeCommand {
     private CodeCommand() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("code").requires(ctx -> !StatusMod.isRemoteDisabled()).executes(ctx -> {
-            handleCode(ctx.getSource());
-            return 1;
-        }));
+        // Admin-only: hide the command from non-admin suggestions and block
+        // execution. handleCode keeps its own check as defense in depth.
+        dispatcher.register(Commands.literal("code")
+                .requires(ctx -> !StatusMod.isRemoteDisabled() && PermissionUtil.hasAdminPermission(ctx))
+                .executes(ctx -> {
+                    handleCode(ctx.getSource());
+                    return 1;
+                }));
     }
 
     private static void handleCode(CommandSourceStack src) {

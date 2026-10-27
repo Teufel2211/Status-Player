@@ -22,7 +22,7 @@ When the dashboard values change centrally, update `dashboardUrl`/`setupSecret` 
 
 | Field | Default | Meaning |
 |-------|---------|---------|
-| `adminOpLevel` | `2` | OP level required for admin commands (1–4). |
+| `adminOpLevel` | `4` | OP level required for admin commands (1–4). Default `4` = owner only. |
 | `statusPermissionNode` | `statusmod.use` | LuckyPerms node for normal use. |
 | `adminPermissionNode` | `statusmod.admin` | LuckyPerms node for admin commands. |
 | `enableAdminOverrides` | `true` | Master switch for `/status admin …` + badge commands. |

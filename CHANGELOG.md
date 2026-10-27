@@ -19,6 +19,8 @@ Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improve
 
 ### Changed
 
+- Admin-only commands: `/code`, `/modinfo` and `/status version` now require admin permissions. `/code` and `/modinfo` are also hidden from non-admin command suggestions; `/status version` stays listed but rejects non-admins.
+- The default `adminOpLevel` is now `4` (owner only). Existing config files keep the level they already specify.
 - Display name: the mod now appears as **Status Player** in the mod list instead of **Status Mod**.
 - Kill switch chat notice: when StatusMod is disabled, players see why (per-server owner notice or global Discord pointer) on join and immediately when the switch changes.
 
