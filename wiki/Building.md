@@ -8,7 +8,7 @@ Builds all 24 combinations (fabric/forge/neoforge/quilt × 1.21.11/26.1/26.1.1/2
 .\scripts\local\build-multiversion.ps1 -Loaders fabric,forge,neoforge,quilt -ContinueOnError:$false
 ```
 
-Output: `dist/multiversion/` (24 × `Statusmod-1.4.0-<loader>-<mc>.jar`), verified by `scripts/ci/verify-jars.ps1`.
+Output: `dist/multiversion/` (24 × `Statusmod-1.4.2-<loader>-<mc>.jar`), verified by `scripts/ci/verify-jars.ps1`.
 
 ## Single loader
 

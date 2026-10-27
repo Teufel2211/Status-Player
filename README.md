@@ -73,13 +73,15 @@ Changes apply with `/status config reload` — no restart needed.
 
 ## Privacy
 
-By default the mod works fully local: no external connections, no telemetry.
-Only minimal data is stored on your own server (name + status + settings).
+Without a dashboard connection the mod works fully local: no external
+connections, no telemetry. Data stays on your own server
+(`config/statusmod/`: player UUID, name, status text and color, settings).
 
-Optional: connect your own status dashboard (opt-in in `config.json`).
-While enabled, the mod exchanges status data with your dashboard so you can
-manage players from the web. Disable anytime by clearing the dashboard values
-in the config.
+Optional: connect your own dashboard (opt-in in `config.json`). While enabled,
+the mod syncs player UUID, name, online presence, status text and color,
+settings, mute state and block list to the dashboard URL you configured, so
+you can manage players from the web. Disable anytime by clearing the dashboard
+values in the config.
 
 ## Links
 

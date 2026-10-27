@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
+## 1.4.2 - 2026-10-27
 
 Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improved** and **Removed**; empty groups are omitted.
 

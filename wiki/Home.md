@@ -2,7 +2,7 @@
 
 StatusMod adds lightweight status tags for players on Minecraft servers and clients.
 
-Current version: **1.4.1** (see [CHANGELOG](../CHANGELOG.md)).
+Current version: **1.4.2** (see [CHANGELOG](../CHANGELOG.md)).
 
 Supported loaders and Minecraft versions:
 
