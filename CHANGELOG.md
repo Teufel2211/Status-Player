@@ -23,6 +23,7 @@ Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improve
 - The default `adminOpLevel` is now `4` (owner only). Existing config files keep the level they already specify.
 - Display name: the mod now appears as **Status Player** in the mod list instead of **Status Mod**.
 - Kill switch chat notice: when StatusMod is disabled, players see why (per-server owner notice or global Discord pointer) on join and immediately when the switch changes.
+- License: from 1.4.2 on, Status Player is released under the **Status Player License 1.0** instead of MIT. Running it on your own servers (including monetized ones) and modifying it for private use stay allowed; rebranding it or publishing a modified version as your own mod does not. A continuation may be published if the project has had no release for twelve months. Versions up to and including 1.4.1 remain MIT.
 
 ### Improved
 

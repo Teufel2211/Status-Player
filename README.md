@@ -92,7 +92,18 @@ values in the config.
 
 ## License
 
-MIT License. See `LICENSE`.
+**Status Player License 1.0** from version 1.4.2 on. See `LICENSE`.
+
+In short: use it on your own servers (also monetized ones) and modify it for
+private use — that is fine. Redistributing it under a different name, or
+publishing a modified version as your own mod, is not.
+
+Exception: if this project has had no release for at least twelve months, you
+may publish a continuation — including under your own name — as long as it
+states that it is based on Status Player and links back here.
+
+Versions up to and including 1.4.1 were published under the MIT License and
+stay under it; the old text is kept in `LICENSE-MIT-legacy.txt`.
 
 ---
 
