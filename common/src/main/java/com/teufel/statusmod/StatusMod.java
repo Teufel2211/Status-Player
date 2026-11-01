@@ -18,11 +18,33 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class StatusMod {
     public static final String MOD_ID = "statusmod";
+    /** Anzeigename. Wird von der Anti-Rebrand-Pruefung (IdentityCheck) verifiziert. */
+    public static final String DISPLAY_NAME = "Status Player";
     /** Bump on every GUI-fix round so running builds are identifiable via log + /status version. */
     public static final String BUILD = "1.4.2";
     /** Mod version for user-facing output + /bug reports. Bump together with version.txt at release prep. */
     public static final String VERSION = "1.4.2";
+    /**
+     * Build-Fingerprint, ausschliesslich intern: "<version>-<loader>-<mc>-<sha8>".
+     * Wird beim Release-Build in die JAR-Ressource statusmod-build.txt gestempelt
+     * (scripts/local/stamp-build.ps1) und hier nur gelesen. Bewusst NICHT in
+     * /status version, GUI, Chat oder Dateinamen - er dient der Zuordnung einer
+     * irgendwo gefundenen Kopie zu einem konkreten Build.
+     */
+    public static final String BUILD_ID = loadBuildId();
+
+    private static String loadBuildId() {
+        try (java.io.InputStream in = StatusMod.class.getResourceAsStream("/statusmod-build.txt")) {
+            if (in == null) return VERSION + "-dev";
+            String id = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+            return id.isEmpty() ? VERSION + "-dev" : id;
+        } catch (Exception e) {
+            return VERSION + "-dev";
+        }
+    }
     private static final AtomicBoolean initialized = new AtomicBoolean(false);
+    /** True wenn die Anti-Rebrand-Pruefung fehlgeschlagen ist (Mod startet nicht). */
+    private static volatile boolean refused = false;
     /** Vom Dashboard gesteuerter Kill-Switch (siehe SyncManager.pull). */
     private static volatile boolean remoteDisabled = false;
     /** "global" oder "server": bestimmt die Chat-Meldung beim Join. */
@@ -40,6 +62,16 @@ public final class StatusMod {
 
     public static void init() {
         if (!initialized.compareAndSet(false, true)) {
+            return;
+        }
+
+        // Anti-Rebrand: dieses JAR muss noch die erwartete Identitaet tragen.
+        // Bei Abweichung startet der Mod nicht - nur /modinfo bleibt erreichbar.
+        String identityFailure = com.teufel.statusmod.util.IdentityCheck.failureReason();
+        if (identityFailure != null) {
+            refused = true;
+            System.out.println("[StatusMod] This build has been modified or rebranded. Refusing to start.");
+            System.out.println("[StatusMod] Reason: " + identityFailure + " - run /modinfo for details.");
             return;
         }
 
@@ -69,6 +101,11 @@ public final class StatusMod {
 
     public static ModConfig getConfig() {
         return config;
+    }
+
+    /** True wenn die Anti-Rebrand-Pruefung fehlgeschlagen ist - der Mod laeuft dann nicht. */
+    public static boolean isRefused() {
+        return refused;
     }
 
     /** True wenn der Fleet-Owner StatusMod fuer diesen Server deaktiviert hat. */

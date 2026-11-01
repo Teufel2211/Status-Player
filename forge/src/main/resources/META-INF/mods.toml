@@ -5,7 +5,7 @@ issueTrackerURL="https://github.com/Teufel2211/Status-Player/issues"
 
 [[mods]]
 modId="statusmod"
-version="${version}"
+version="1.4.2"
 displayName="Status Player"
 description="Lightweight player status tags - Online, AFK, DND, Offline"
 logo="logo.png"

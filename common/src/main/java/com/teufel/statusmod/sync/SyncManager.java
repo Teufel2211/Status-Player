@@ -39,6 +39,10 @@ public final class SyncManager {
             .version(HttpClient.Version.HTTP_1_1)
             .build();
     private static final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
+    /** Aktueller Sync-Thread; nur setzen/loeschen, wenn man ihn besitzt. */
+    private static volatile Thread threadRef = null;
+    /** Dashboard hat den Sync-Code abgelehnt (403) -> Loop beenden, bis neu bestaetigt. */
+    private static volatile boolean codeRejected = false;
     private static volatile boolean pushDirty = false;
     public static volatile String lastPushInfo = "-";
     public static volatile String lastPullInfo = "-";
@@ -77,16 +81,79 @@ public final class SyncManager {
         if (config.effectiveDashboardUrl().isEmpty()) return;
         if (config.serverId == null || config.serverId.isEmpty()) return;
         if (config.apiKey == null || config.apiKey.isEmpty()) return;
+        boolean needsCode = config.syncCode == null || config.syncCode.isEmpty();
         if (!started.compareAndSet(false, true)) return;
-        Thread thread = new Thread(SyncManager::loop, "statusmod-sync");
+        codeRejected = false;
+        Thread thread = new Thread(needsCode ? SyncManager::bootstrap : SyncManager::loop,
+                needsCode ? "statusmod-sync-bootstrap" : "statusmod-sync");
         thread.setDaemon(true);
+        threadRef = thread;
         thread.start();
-        System.out.println("[StatusMod] Sync enabled. Push interval: " + (SYNC_INTERVAL_MS / 1000) + "s");
+        if (!needsCode) {
+            System.out.println("[StatusMod] Sync enabled. Push interval: " + (SYNC_INTERVAL_MS / 1000) + "s");
+        }
+    }
+
+    /**
+     * Ohne bestaetigten Code: genau ein Pull ohne x-sync-code. Server, die vor
+     * dem Sync-Code existierten, bekommen dabei automatisch einen Code vom
+     * Dashboard (Migration ohne Ausfall); neue Server antworten 403 und der
+     * Sync bleibt aus, bis der Admin einen Code bestaetigt. Der Code kommt
+     * ausschliesslich vom Dashboard - ein lokal erzeugter waere wertlos, weil
+     * eine Kopie sich selbst einen ausstellen koennte.
+     */
+    private static void bootstrap() {
+        try {
+            pull(true);
+        } catch (Exception e) {
+            lastPullInfo = "ex: " + e.getMessage();
+        }
+        // Waehrend des Pulls gestoppt (z. B. /status sync reset)?
+        if (Thread.currentThread() != threadRef) return;
+        ModConfig config = StatusMod.getConfig();
+        if (config == null || config.syncCode == null || config.syncCode.isEmpty() || codeRejected) {
+            System.out.println("[StatusMod] Sync is not confirmed. Get a code from your dashboard and run: /status sync confirm <code>");
+            exitLoop();
+            return;
+        }
+        loop();
     }
 
     public static void retryStart() {
         if (started.get()) return;
         start();
+    }
+
+    /**
+     * Beendet den Sync-Loop (z. B. nach /status sync reset). Der Thread wird
+     * unterbrochen; ein spaeterer start() legt einen neuen an.
+     */
+    public static void stop() {
+        Thread t = threadRef;
+        threadRef = null;
+        started.set(false);
+        if (t != null) t.interrupt();
+    }
+
+    /**
+     * Neustart mit frisch geladenem Code: stop() + start(). Wichtig, weil ein
+     * laufender Loop den Code zwar pro Tick neu liest, aber nach einem 403
+     * bereits ausgestiegen ist.
+     */
+    public static void restart() {
+        stop();
+        start();
+    }
+
+    /**
+     * Beendet den Loop nur, wenn der aufrufende Thread noch der aktuelle ist.
+     * Sonst wuerde ein alter Thread den Zustand eines neuen ueberschreiben.
+     */
+    private static void exitLoop() {
+        if (Thread.currentThread() == threadRef) {
+            threadRef = null;
+            started.set(false);
+        }
     }
 
     private static void loop() {
@@ -102,7 +169,12 @@ public final class SyncManager {
             // Feature-Toggle live beachten (kein Restart noetig).
             ModConfig loopCfg = StatusMod.getConfig();
             if (loopCfg == null || !loopCfg.isEnabled("sync")) {
-                started.set(false);
+                exitLoop();
+                return;
+            }
+            // /status sync reset: Loop ohne Code nicht weiterlaufen lassen.
+            if (loopCfg.syncCode == null || loopCfg.syncCode.isEmpty()) {
+                exitLoop();
                 return;
             }
             // Erst pullen, dann pushen: Dashboard-Edits werden lokal angewendet,
@@ -116,6 +188,10 @@ public final class SyncManager {
                     System.out.println("[StatusMod] Sync pull failed: " + e.getMessage());
                 }
             }
+            if (codeRejected) {
+                exitLoop();
+                return;
+            }
             if (pushDirty || (now - lastPush) >= SYNC_INTERVAL_MS) {
                 pushDirty = false;
                 lastPush = now;
@@ -125,6 +201,10 @@ public final class SyncManager {
                     lastPushInfo = "ex: " + e.getMessage();
                     System.out.println("[StatusMod] Sync push failed: " + e.getMessage());
                 }
+            }
+            if (codeRejected) {
+                exitLoop();
+                return;
             }
         }
     }
@@ -143,6 +223,8 @@ public final class SyncManager {
         if (!isValidUuid(config.serverId)) return;
         String endpoint = dashboardUrl + "/api/players/" + config.serverId + "/sync";
         String apiKey = config.apiKey;
+        String syncCode = config.syncCode == null ? "" : config.syncCode.trim();
+        if (syncCode.isEmpty()) return;
 
         JsonObject payload = new JsonObject();
 
@@ -239,6 +321,7 @@ public final class SyncManager {
                 .timeout(Duration.ofSeconds(20))
                 .header("Content-Type", "application/json")
                 .header("x-api-key", apiKey)
+                .header("x-sync-code", syncCode)
                 .POST(HttpRequest.BodyPublishers.ofString(payload.toString()))
                 .build();
 
@@ -249,7 +332,9 @@ public final class SyncManager {
             try (java.io.InputStream in = response.body()) {
                 code = response.statusCode();
             }
-            if (code < 200 || code >= 300) {
+            if (code == 403) {
+                onCodeRejected("push");
+            } else if (code < 200 || code >= 300) {
                 lastPushInfo = "HTTP " + code;
                 System.out.println("[StatusMod] Sync push status " + code);
             } else {
@@ -269,6 +354,16 @@ public final class SyncManager {
     }
 
     private static void pull() {
+        pull(false);
+    }
+
+    /**
+     * @param bootstrap true = einmaliger Erstkontakt ohne Code (Alt-Server-
+     *                  Migration). Ein 403 beendet dann nicht den Loop,
+     *                  sondern laesst {@link #bootstrap()} die Anleitung
+     *                  ausgeben.
+     */
+    private static void pull(boolean bootstrap) {
         ModConfig config = StatusMod.getConfig();
         if (config == null || StatusMod.mutedPlayers == null || StatusMod.blockedPlayers == null) return;
         String dashboardUrl = CodeGenerator.trimTrailingSlash(config.effectiveDashboardUrl());
@@ -277,20 +372,29 @@ public final class SyncManager {
             return;
         }
         if (!isValidUuid(config.serverId)) return;
+        String syncCode = config.syncCode == null ? "" : config.syncCode.trim();
+        if (syncCode.isEmpty() && !bootstrap) return;
         String since = config.lastSyncAtMs > 0L ? "?since=" + java.time.Instant.ofEpochMilli(config.lastSyncAtMs) : "";
         String endpoint = dashboardUrl + "/api/players/" + config.serverId + "/sync" + since;
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(endpoint))
                 .timeout(Duration.ofSeconds(20))
                 .header("x-api-key", config.apiKey)
-                .GET()
-                .build();
+                .GET();
+        if (!syncCode.isEmpty()) builder.header("x-sync-code", syncCode);
+        HttpRequest request = builder.build();
 
         String body;
         try {
             HttpResponse<java.io.InputStream> response =
                 HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() == 403) {
+                try { response.body().close(); } catch (Exception ignored) {}
+                if (bootstrap) lastPullInfo = "code not confirmed";
+                else onCodeRejected("pull");
+                return;
+            }
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 lastPullInfo = "HTTP " + response.statusCode();
                 try { response.body().close(); } catch (Exception ignored) {}
@@ -312,6 +416,14 @@ public final class SyncManager {
         } catch (Exception e) {
             System.out.println("[StatusMod] Sync pull: invalid JSON response");
             return;
+        }
+
+        // Automatische Migration fuer Server, die vor dem Sync-Code existierten:
+        // das Dashboard legt einen Code an und liefert ihn genau hier aus.
+        // Nie einen bereits bestaetigten Code ueberschreiben.
+        if (json.has("sync_code_setup") && json.get("sync_code_setup").isJsonPrimitive()
+                && json.get("sync_code_setup").getAsJsonPrimitive().isString()) {
+            adoptSyncCode(json.get("sync_code_setup").getAsString());
         }
 
         // Kill-Switch zuerst auswerten: die Antwort darf bei deaktiviertem
@@ -561,6 +673,44 @@ public final class SyncManager {
             fresh.save();
             com.teufel.statusmod.StatusMod.config = fresh;
         } catch (Exception ignored) {}
+    }
+
+    /**
+     * Uebernimmt einen vom Dashboard ausgestellten Sync-Code. Reload-Merge wie
+     * in SetupManager.pollPendingKey: die Platte ist die Wahrheit, nur dieses
+     * eine Feld wird gesetzt. Ein bereits bestaetigter Code wird nie
+     * ueberschrieben.
+     */
+    private static void adoptSyncCode(String code) {
+        String v = code == null ? "" : code.trim();
+        if (v.isEmpty() || v.length() > 64) return;
+        ModConfig current = StatusMod.getConfig();
+        if (current != null && current.syncCode != null && !current.syncCode.isEmpty()) return;
+        try {
+            ModConfig fresh = ModConfig.load();
+            if (fresh.syncCode != null && !fresh.syncCode.isEmpty()) {
+                StatusMod.config = fresh;
+                return;
+            }
+            fresh.syncCode = v;
+            fresh.save();
+            StatusMod.config = fresh;
+            System.out.println("[StatusMod] Sync code adopted from dashboard.");
+        } catch (Exception e) {
+            System.out.println("[StatusMod] Sync code adoption failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Dashboard hat den Code abgelehnt (403). Der Loop beendet sich danach;
+     * ein neuer Versuch passiert erst nach /status sync confirm. Der Code
+     * selbst wird nie geloggt.
+     */
+    private static void onCodeRejected(String op) {
+        codeRejected = true;
+        if ("push".equals(op)) lastPushInfo = "code rejected";
+        else lastPullInfo = "code rejected";
+        System.out.println("[StatusMod] Sync rejected: code not confirmed. Get a new code from your dashboard and run: /status sync confirm <code>");
     }
 
     private static void applyOnline(MinecraftServer server, String uuidStr, PlayerSettings ps) {

@@ -1152,6 +1152,18 @@ Write-Host "Build report: $reportFile"
 Write-Host "Markdown report: $markdownReportFile"
 $results | Format-Table -AutoSize | Out-String | Write-Host
 
+# Build-Fingerprint stempeln (statusmod-build.txt im JAR-Root). Passiert nach dem
+# Kopieren, weil der Hash das fertige JAR beschreibt. StatusMod.BUILD_ID liest
+# den Wert beim Start; er erscheint nie im Dateinamen oder in Metadaten.
+if (-not $DryRun) {
+    try {
+        & (Join-Path $PSScriptRoot "stamp-build.ps1") -OutputDir $OutputDir
+    } catch {
+        Write-Host "Warning: failed to stamp build fingerprint: $($_.Exception.Message)"
+        if (-not $ContinueOnError) { exit 1 }
+    }
+}
+
 $failed = @($results | Where-Object { $_.status -eq "failed" }).Count
 if ($failed -gt 0 -and -not $ContinueOnError) {
     exit 1

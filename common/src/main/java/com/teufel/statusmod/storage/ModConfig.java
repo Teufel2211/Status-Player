@@ -60,10 +60,20 @@ public class ModConfig {
     public boolean restoreAfkOnJoin = false;
     public boolean restoreTimedOnJoin = true;
 
-    public String dashboardUrl = "https://statusmod-dashboard.vercel.app";
+    /**
+     * Kein Default mehr: eine frische Mod-Kopie ohne eigene config.json zeigt
+     * damit auf kein Dashboard. Frueher stand hier die Autoren-URL, wodurch
+     * jede Kopie automatisch am Dashboard des Autors hing.
+     */
+    public String dashboardUrl = "";
     public String setupSecret = "";
     public String serverId = "";
     public String apiKey = "";
+    /**
+     * Vom Dashboard ausgestellter Sync-Bestaetigungscode. Leer = nicht
+     * bestaetigt; dann startet der Sync nicht. Wird nie geloggt.
+     */
+    public String syncCode = "";
     public long lastSyncAtMs = 0L;
     /**
      * Zuletzt vom Dashboard gemeldeter Kill-Switch-Zustand. Persistiert, damit
@@ -203,6 +213,8 @@ public class ModConfig {
         else serverId = serverId.trim();
         if (apiKey == null) apiKey = "";
         else apiKey = stripQuotes(apiKey.trim());
+        if (syncCode == null) syncCode = "";
+        else syncCode = stripQuotes(syncCode.trim());
         if (remoteDisabledScope == null) remoteDisabledScope = "server";
         else {
             remoteDisabledScope = remoteDisabledScope.trim().toLowerCase();

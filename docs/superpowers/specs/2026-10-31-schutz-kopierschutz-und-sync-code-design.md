@@ -132,16 +132,16 @@ Reihenfolge: A4 kommt **zuletzt**, nach Teil B und A2/A3, weil es das größte R
 | Änderung | Datei |
 |----------|-------|
 | Neues Feld `syncCode` (leer = nicht bestätigt) + Normalisierung | `storage/ModConfig.java` |
-| `start()` startet nur, wenn `syncCode` gesetzt ist; sonst Log mit Anleitung | `sync/SyncManager.java` |
-| Header `x-sync-code` bei Push und Pull | `sync/SyncManager.java` |
+| `start()` startet mit Code den Sync-Loop, ohne Code einen einmaligen Bootstrap-Pull | `sync/SyncManager.java` |
+| Header `x-sync-code` bei Push und Pull (beim Bootstrap-Pull bewusst nicht) | `sync/SyncManager.java` |
 | Neuer Befehl `/status sync status\|confirm <code>\|reset` (admin-only, Audit-Log) | `command/StatusCommand.java` |
 | Default `dashboardUrl` entfernen | `storage/ModConfig.java` |
 
 Verhalten von `/status sync`:
 
 - `status` — zeigt: Feature an/aus, URL gesetzt?, Server-ID gesetzt?, API-Key gesetzt?, Code bestätigt ja/nein, letzter Push/Pull
-- `confirm <code>` — validiert Format (8 Zeichen, `A-Za-z0-9`), speichert in `config.syncCode`, startet Sync sofort (`SyncManager.retryStart()`), Audit-Eintrag
-- `reset` — löscht `config.syncCode`, stoppt den Sync-Loop
+- `confirm <code>` — validiert Format (8 Zeichen, `A-Za-z0-9`), speichert in `config.syncCode`, startet Sync sofort (`SyncManager.restart()`), Audit-Eintrag
+- `reset` — löscht `config.syncCode`, stoppt den Sync-Loop (`SyncManager.stop()`), Audit-Eintrag
 
 Ohne bestätigten Code schreibt der Mod beim Start genau eine Zeile:
 
@@ -149,45 +149,63 @@ Ohne bestätigten Code schreibt der Mod beim Start genau eine Zeile:
 [StatusMod] Sync is not confirmed. Get a code from your dashboard and run: /status sync confirm <code>
 ```
 
+**Bootstrap-Pull (nötig für die Migrations-Anforderung).** Ein Sync, der ohne Code gar nichts tut, könnte Alt-Server nie migrieren — die Migration passiert aber genau beim ersten Kontakt. Darum macht `start()` ohne Code **einen** Pull ohne `x-sync-code`:
+
+- Alt-Server: Dashboard stellt automatisch einen Code aus und liefert ihn als `sync_code_setup`; der Mod übernimmt ihn (`adoptSyncCode()`, Reload-Merge wie `SetupManager.pollPendingKey`) und geht in den normalen Loop über.
+- Neue Server: `403` → Bootstrap endet, eine Log-Zeile mit Anleitung, kein Push. Ab da nur noch `/status sync confirm`.
+- Der Bootstrap läuft **nur** beim Start bzw. nach `restart()` — nie periodisch, damit ein zurückgesetzter Server nicht in einer 403-Schleife hängt.
+
 ### Dashboard-Seite
 
-**Migration** (`007_server_sync_codes.sql`):
+**Migration** (`011_server_sync_codes.sql` — 007 ist belegt):
 
 ```
-servers.sync_code_hash      text        -- Argon2id, wie api_keys
-servers.sync_code_created_at timestamptz
-servers.sync_confirmed_at    timestamptz
+servers.sync_code_hash           text        -- Argon2id, wie api_keys (aktiver Code)
+servers.sync_code_pending_hash   text        -- neu erzeugt, noch nicht bestätigt
+servers.sync_code_pending_secret text        -- AES-verschlüsselter Klartext des Migrationscodes
+servers.sync_code_created_at     timestamptz
+servers.sync_confirmed_at        timestamptz
+servers.sync_reset_at            timestamptz -- Marker: bewusst zurückgesetzt
 ```
 
 **Routen:**
 
 | Route | Methode | Auth | Zweck |
 |-------|---------|------|-------|
+| `/api/server/[server_id]/sync-code` | GET | Session, jede Rolle des Servers | `{configured, pending, confirmed, created_at, confirmed_at, reset_at}` |
 | `/api/server/[server_id]/sync-code` | POST | Session, owner, eigene `server_id` | Neuen Code erzeugen; Klartext wird **einmalig** zurückgegeben |
-| `/api/server/[server_id]/sync-code` | DELETE | Session, owner | Zurücksetzen (Hash löschen, `sync_confirmed_at` null) |
-| `/api/server/[server_id]/sync-code/status` | GET | Session, owner | `{configured: bool, confirmed: bool, created_at}` |
+| `/api/server/[server_id]/sync-code` | DELETE | Session, owner | Zurücksetzen (alle Code-Spalten null + `sync_reset_at = now()`) |
 
-**Prüfung in den Sync-Routen** (`/api/players/[server_id]/sync`, GET + POST):
+**Prüfung in den Sync-Routen** (`/api/players/[server_id]/sync`, GET + POST) — `lib/sync-code.ts`, `evaluateSyncCode()`:
 
-- `x-sync-code` fehlt oder passt nicht zum Hash → `403 {error: "sync_not_confirmed"}`
-- Kein Hash gesetzt (Server noch nie migriert) → automatische Migration, siehe unten
+1. `x-sync-code` passt zum aktiven Hash → erlaubt
+2. passt zum **pending** Hash → erlaubt **und** befördert (pending → aktiv, alter Code stirbt)
+3. gar kein Code konfiguriert und Server ist Alt-Server (siehe unten) → automatische Migration, `sync_code_setup` in der Antwort
+4. pending Migrationscode vorhanden, Aufrufer schickt **keinen** Code → Klartext erneut als `sync_code_setup` ausliefern
+5. sonst → `403 {error: "sync_not_confirmed"}`
 
-**UI:** Karte „Sync" auf der Config-Seite — Code anzeigen (einmalig, mit Copy-Button), Status „bestätigt seit …", Button „Sync zurücksetzen".
+`403` ist eindeutig Sync-Code: `requireApiKey` antwortet mit `401`. Der Kill-Switch-Pfad (200 mit `mod_enabled:false`) liefert `sync_code_setup` ebenfalls mit, damit die Migration auch bei deaktiviertem Mod durchläuft.
+
+**Pending-Modell (kein Ausfall beim Code-Wechsel).** Ein im Dashboard erzeugter Code landet in `sync_code_pending_hash`; der bisherige aktive Code bleibt gültig, bis der Mod den neuen bestätigt. Erst die Bestätigung befördert ihn.
+
+**UI:** eigene Seite `/dashboard/sync` (Sidebar-Eintrag „Sync" unter „Konfiguration"): Status (bestätigt / wartet / zurückgesetzt, Zeitstempel), „Neuen Code erzeugen" mit Einmal-Anzeige + Copy, Anleitung `/status sync confirm <code>`, „Sync zurücksetzen" mit Sicherheitsabfrage. Status-GET für alle Rollen, die beiden Schreibaktionen nur für den Owner.
 
 ### Migration bestehender Server (automatisch)
 
-Beim ersten Pull/Push eines Servers ohne `sync_code_hash`:
+Stichtag ist `2026-11-01T00:00:00Z` (Konstante `AUTO_MIGRATION_CUTOFF_MS`). Server mit `created_at` **davor** gelten als Alt-Server:
 
-1. Dashboard erzeugt einen Code, speichert den Hash, merkt den Klartext für **eine** Antwort
-2. Antwort enthält zusätzlich `sync_code_setup: "<code>"` und `sync_code_setup_once: true`
-3. Mod speichert den Code in `config.syncCode` (Reload-Merge wie beim API-Key, nie fremde Änderungen überschreiben)
-4. Ab dem nächsten Request gilt die normale Prüfung
+1. Beim ersten Pull/Push ohne `sync_code_hash`/`sync_code_pending_hash` erzeugt das Dashboard einen Code und legt Hash **und** AES-verschlüsselten Klartext (`sync_code_pending_secret`) ab.
+2. Die Antwort enthält `sync_code_setup: "<code>"` (plus die normalen Daten — der erste Sync läuft also sofort).
+3. Der Mod übernimmt den Code in `config.syncCode` und bestätigt ihn beim nächsten Request (Regel 2 oben), dabei wird `sync_code_pending_secret` gelöscht.
+4. Geht die Antwort verloren, wird der Klartext bei einem code-losen Aufruf erneut ausgeliefert (Regel 4) — der Server bleibt also nicht hängen.
 
-Neue Server (registriert **nach** dem Update) bekommen **keinen** automatischen Code — die müssen paaren. Erkennungsmerkmal: `servers.created_at` nach dem Migrationszeitpunkt.
+Server, die **nach** dem Stichtag angelegt wurden, bekommen keinen automatischen Code und müssen paaren.
+
+**Reset-Sperre:** `sync_reset_at` verhindert, dass ein bewusst zurückgesetzter Server beim nächsten Bootstrap-Pull wieder automatisch migriert wird — sonst wäre „Sync zurücksetzen" wirkungslos.
 
 ### Rücksetzer (der eigentliche Hebel)
 
-„Sync zurücksetzen" im Dashboard löscht den Hash. Jede Installation — auch eine kopierte mit gültiger `config.json` — bekommt ab dem nächsten Request `403 sync_not_confirmed` und stellt den Sync ein. Der Server-Admin muss einen neuen Code holen und ingame bestätigen.
+„Sync zurücksetzen" im Dashboard löscht die Hashes und setzt `sync_reset_at`. Jede Installation — auch eine kopierte mit gültiger `config.json` — bekommt ab dem nächsten Request `403 sync_not_confirmed` und stellt den Sync ein. Der Server-Admin muss einen neuen Code holen und ingame bestätigen.
 
 ### Grenzen (bewusst akzeptiert)
 
@@ -211,6 +229,7 @@ Neue Server (registriert **nach** dem Update) bekommen **keinen** automatischen 
 - Sync mit richtigem Code → `200`
 - Zurücksetzen → alter Code `403`
 - Migration: Server ohne Hash bekommt beim ersten Pull `sync_code_setup`
+- Reset-Sperre: nach DELETE liefert derselbe Server keinen neuen `sync_code_setup` mehr (403)
 
 **Mod**
 - `:common:compileJava` grün
@@ -241,7 +260,7 @@ Neue Server (registriert **nach** dem Update) bekommen **keinen** automatischen 
 ## Changelog
 
 Unter `## 1.4.2`:
-- **Added:** Sync-Bestätigungscode (`/status sync confirm`), Dashboard-Karte „Sync"
+- **Added:** Sync-Bestätigungscode (`/status sync confirm`), Dashboard-Seite „Sync"
 - **Added:** Build-Fingerprint im JAR, Schutz gegen Re-Branding
 - **Changed:** Dashboard-URL hat keinen Default mehr — muss eingetragen werden
 - **Changed:** Lizenz ab 1.4.2 ist die „Status Player License 1.0" (Rebranding verboten, Fortführung erst nach 12 Monaten ohne Release)

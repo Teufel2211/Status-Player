@@ -20,15 +20,20 @@ public final class StatusModFabric implements ModInitializer {
     @Override
     public void onInitialize() {
         StatusMod.init();
+        // Anti-Rebrand: bei fehlgeschlagener Identitaetspruefung nur /modinfo
+        // registrieren - keine Commands, kein Sync, kein Lifecycle.
+        boolean refused = StatusMod.isRefused();
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            StatusCommand.register(dispatcher);
             ModInfoCommand.register(dispatcher);
+            if (refused) return;
+            StatusCommand.register(dispatcher);
             SettingsCommand.register(dispatcher);
             BlockCommand.register(dispatcher);
             ColorCommand.register(dispatcher);
             CodeCommand.register(dispatcher);
             BugCommand.register(dispatcher);
         });
+        if (refused) return;
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> StatusLifecycle.onPlayerJoin(server, handler.getPlayer()));
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> StatusLifecycle.onPlayerDisconnect(handler.getPlayer()));
         ServerTickEvents.END_SERVER_TICK.register(StatusLifecycle::onServerTick);

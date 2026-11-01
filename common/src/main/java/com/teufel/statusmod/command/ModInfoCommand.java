@@ -22,9 +22,11 @@ public class ModInfoCommand {
                     try {
                         CommandUtil.sendSuccess(src, Component.literal("Status Player — Informationen"), false);
                         CommandUtil.sendSuccess(src, Component.literal("Status: "
-                            + (StatusMod.isRemoteDisabled()
-                                ? "vom Admin-Dashboard deaktiviert"
-                                : "aktiv")), false);
+                            + (StatusMod.isRefused()
+                                ? "deaktiviert — dieses Build wurde verändert oder umbenannt (Anti-Rebrand-Prüfung). Bitte das Original von der Projektseite installieren."
+                                : StatusMod.isRemoteDisabled()
+                                    ? "vom Admin-Dashboard deaktiviert"
+                                    : "aktiv")), false);
                         CommandUtil.sendSuccess(src, Component.literal("Website: " + WEBSITE), false);
                         CommandUtil.sendSuccess(src, Component.literal("Issues: " + ISSUES), false);
                     } catch (Exception e) {

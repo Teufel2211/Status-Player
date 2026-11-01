@@ -99,6 +99,37 @@ foreach ($jar in $jars) {
                 Write-Warning "   no version metadata found in JAR"
                 $errors++
             }
+
+            # Release-Ressourcen: Build-Fingerprint (A2) + Lizenz-Kurzfassung (A1).
+            $buildId = $null
+            $hasLicense = $false
+            foreach ($entry in $zip.Entries) {
+                if ($entry.Name -eq "statusmod-build.txt") {
+                    $reader = [System.IO.StreamReader]::new($entry.Open())
+                    $buildId = $reader.ReadToEnd().Trim()
+                    $reader.Close()
+                } elseif ($entry.Name -eq "statusmod-license.txt") {
+                    $hasLicense = $true
+                }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($buildId)) {
+                Write-Warning "   FAIL: statusmod-build.txt missing or empty"
+                $errors++
+            } else {
+                $expectedBuildId = "^$([Regex]::Escape($modVersion))-[a-z]+-[0-9.]+-[0-9a-f]{8}$"
+                if ($buildId -match $expectedBuildId) {
+                    Write-Host "   statusmod-build.txt $buildId OK"
+                } else {
+                    Write-Warning "   FAIL: statusmod-build.txt has unexpected value '$buildId'"
+                    $errors++
+                }
+            }
+
+            if (-not $hasLicense) {
+                Write-Warning "   FAIL: statusmod-license.txt missing"
+                $errors++
+            }
         } finally {
             $zip.Dispose()
         }

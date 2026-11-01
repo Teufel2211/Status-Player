@@ -35,8 +35,10 @@ public final class StatusModForge {
 
     @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
-        StatusCommand.register(event.getDispatcher());
+        // Anti-Rebrand: bei fehlgeschlagener Identitaetspruefung nur /modinfo.
         ModInfoCommand.register(event.getDispatcher());
+        if (StatusMod.isRefused()) return;
+        StatusCommand.register(event.getDispatcher());
         SettingsCommand.register(event.getDispatcher());
         BlockCommand.register(event.getDispatcher());
         ColorCommand.register(event.getDispatcher());
@@ -46,6 +48,7 @@ public final class StatusModForge {
 
     @SubscribeEvent
     public void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
+        if (StatusMod.isRefused()) return;
         if (event.getEntity() instanceof ServerPlayer player) {
             StatusLifecycle.onPlayerJoin(player.level().getServer(), player);
         }
@@ -53,6 +56,7 @@ public final class StatusModForge {
 
     @SubscribeEvent
     public void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (StatusMod.isRefused()) return;
         if (event.getEntity() instanceof ServerPlayer player) {
             StatusLifecycle.onPlayerDisconnect(player);
         }
@@ -60,6 +64,7 @@ public final class StatusModForge {
 
     @SubscribeEvent
     public void onServerTick(TickEvent.ServerTickEvent.Post event) {
+        if (StatusMod.isRefused()) return;
         StatusLifecycle.onServerTick(event.server());
     }
 }

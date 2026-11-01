@@ -1,7 +1,8 @@
-import { ok, serverError, unauthorized, badRequest } from "@/lib/response"
+import { ok, serverError, unauthorized, badRequest, forbidden } from "@/lib/response"
 import { getServiceClient } from "@/lib/supabase"
 import { requireApiKey } from "@/lib/auth"
 import { validatePathUuid } from "@/lib/validators"
+import { evaluateSyncCode, SYNC_CODE_SELECT, type SyncCodeServerRow } from "@/lib/sync-code"
 import { z } from "zod"
 
 const PlayerSyncSchema = z.object({
@@ -48,17 +49,28 @@ export async function POST(
 
   const sb = getServiceClient()
 
-  // Kill-Switch: Schreibvorgaenge still verwerfen, solange der Server (oder
-  // die ganze Flotte) im Admin-Dashboard deaktiviert ist. 200 statt Fehler,
-  // damit ein Mod, der das Flag noch nicht geholt hat, nicht Logs spammt.
   const { data: serverRow, error: flagError } = await (sb as any)
     .from("servers")
-    .select("mod_enabled")
+    .select(`${SYNC_CODE_SELECT}, mod_enabled`)
     .eq("id", params.server_id)
     .maybeSingle()
   if (flagError) return serverError()
   if (!serverRow) return badRequest()
 
+  // Sync-Bestaetigungscode: ein kopiertes JAR mit kopierter config.json
+  // verliert hier den Zugang, sobald der Code im Dashboard zurueckgesetzt
+  // wurde. 403 ist eindeutig Sync-Code (requireApiKey liefert 401).
+  const gate = await evaluateSyncCode(
+    sb,
+    serverRow as SyncCodeServerRow,
+    request.headers.get("x-sync-code")
+  )
+  if (!gate.allowed) return forbidden("sync_not_confirmed")
+  const setupField = gate.setupCode ? { sync_code_setup: gate.setupCode } : {}
+
+  // Kill-Switch: Schreibvorgaenge still verwerfen, solange der Server (oder
+  // die ganze Flotte) im Admin-Dashboard deaktiviert ist. 200 statt Fehler,
+  // damit ein Mod, der das Flag noch nicht geholt hat, nicht Logs spammt.
   const { data: fleetRow } = await (sb as any)
     .from("fleet_config")
     .select("mod_enabled")
@@ -66,7 +78,7 @@ export async function POST(
     .maybeSingle()
   if (serverRow.mod_enabled === false || fleetRow?.mod_enabled === false) {
     const mod_disabled_scope = fleetRow?.mod_enabled === false ? "global" : "server"
-    return ok({ synced: 0, mod_enabled: false, mod_disabled_scope })
+    return ok({ synced: 0, mod_enabled: false, mod_disabled_scope, ...setupField })
   }
 
   let body: unknown
@@ -156,7 +168,7 @@ export async function POST(
     if (error) return serverError()
   }
 
-  return ok({ synced: rows.length + mutedRows.length + blockedRows.length })
+  return ok({ synced: rows.length + mutedRows.length + blockedRows.length, ...setupField })
 }
 
 export async function GET(
@@ -176,11 +188,22 @@ export async function GET(
 
   const { data: serverRow, error: flagError } = await (sb as any)
     .from("servers")
-    .select("mod_enabled")
+    .select(`${SYNC_CODE_SELECT}, mod_enabled`)
     .eq("id", params.server_id)
     .maybeSingle()
   if (flagError) return serverError()
   if (!serverRow) return badRequest()
+
+  // Sync-Bestaetigungscode (siehe lib/sync-code.ts). Bei Alt-Servern ohne
+  // Code wird hier einmalig automatisch einer ausgestellt und in der Antwort
+  // mitgeliefert; der Mod uebernimmt ihn dann selbst.
+  const gate = await evaluateSyncCode(
+    sb,
+    serverRow as SyncCodeServerRow,
+    request.headers.get("x-sync-code")
+  )
+  if (!gate.allowed) return forbidden("sync_not_confirmed")
+  const setupField = gate.setupCode ? { sync_code_setup: gate.setupCode } : {}
 
   const { data: fleetRow } = await (sb as any)
     .from("fleet_config")
@@ -191,7 +214,7 @@ export async function GET(
     // Nur das Flag liefern: der Mod ueberspringt die Datenverarbeitung und
     // laesst den Watermark stehen, damit Re-Enable den Rueckstand nachzieht.
     const mod_disabled_scope = fleetRow?.mod_enabled === false ? "global" : "server"
-    return ok({ mod_enabled: false, mod_disabled_scope, server_time: new Date().toISOString() })
+    return ok({ mod_enabled: false, mod_disabled_scope, server_time: new Date().toISOString(), ...setupField })
   }
 
   let playerQuery = (sb as any)
@@ -266,6 +289,7 @@ export async function GET(
 
   return ok({
     mod_enabled: true,
+    ...setupField,
     players: players ?? [],
     muted: muted ?? [],
     blocked: blocked ?? [],

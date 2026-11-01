@@ -57,6 +57,9 @@ export default function Sidebar({ variant = "dashboard" }: { variant?: Variant }
             ]
           : []),
         { href: `${base}/keys`, label: "API-Keys", icon: "⌨" },
+        ...(variant === "dashboard"
+          ? [{ href: `${base}/sync`, label: "Sync", icon: "⇅" }]
+          : []),
         { href: `${base}/audit`, label: "Verlauf", icon: "◉" },
       ],
     },
