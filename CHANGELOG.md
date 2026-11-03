@@ -29,6 +29,7 @@ Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improve
 
 - `/bug` now accepts up to 3 screenshots per report: attach them in-game (screenshot picker) or upload them in the browser via the link in chat (works for vanilla clients and Bedrock players too). Images show up as thumbnails in the dashboard inbox.
 - Mod menu links: the Website and Issues buttons now open the Modrinth project page and the GitHub issue tracker instead of being greyed out.
+- Release builds are obfuscated: internal class names are shortened and debug information (source file names, line numbers, local variable names) is removed. Loader entrypoints, the public API, the dashboard sync and all commands behave unchanged.
 
 ## 1.4.1 - 2026-10-15
 
