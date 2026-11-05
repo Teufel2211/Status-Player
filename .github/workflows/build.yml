@@ -108,6 +108,26 @@ jobs:
         shell: pwsh
         run: Get-Content dist/multiversion/build-report.md -Raw | Write-Host
 
+      # A4: Release-JARs werden vor Verify/Runtime/Publish obfuskiert. Die CI baut
+      # aus dem Quellcode; ohne diesen Schritt wuerden unobfuskierte JARs
+      # veroeffentlicht. Die Backup-Kopie liegt ausserhalb von dist, damit sie
+      # beim naechsten Lauf nicht als zusaetzliches Release-JAR zaehlt.
+      - name: Fetch ProGuard toolchain
+        shell: pwsh
+        run: .\scripts\ci\fetch-proguard.ps1 -TargetDir "$env:RUNNER_TEMP\proguard"
+
+      - name: Obfuscate release JARs (A4)
+        shell: pwsh
+        run: |
+          $pg = "$env:RUNNER_TEMP\proguard"
+          .\scripts\local\obfuscate-release.ps1 `
+            -InputDir dist/multiversion `
+            -BackupDir "$env:RUNNER_TEMP\a4-backup" `
+            -ProguardJar "$pg\proguard-base-7.10.0.jar" `
+            -ProguardCoreJar "$pg\proguard-core-9.4.0.jar" `
+            -ProguardDependencyDir $pg `
+            -AsmDir "$pg\asm"
+
       - name: Verify JARs
         shell: pwsh
         run: .\scripts\ci\verify-jars.ps1
@@ -244,7 +264,7 @@ jobs:
           if (Test-Path -LiteralPath "CHANGELOG.md") {
             $clText = Get-Content -LiteralPath "CHANGELOG.md" -Raw
             $cm = [regex]::Match($clText, "(?ms)^## " + [regex]::Escape($ver) + "\b.*?\r?\n([\s\S]*?)(?=^## |\z)")
-            if ($cm.Success) { $changelog = "# StatusMod $ver`n`n" + $cm.Groups[1].Value.Trim() + "`n" }
+            if ($cm.Success) { $changelog = "# Status Player $ver`n`n" + $cm.Groups[1].Value.Trim() + "`n" }
           }
           if ([string]::IsNullOrWhiteSpace($changelog)) {
             $changelog = if ($lastTag) {
@@ -283,6 +303,6 @@ jobs:
             "$h  $(Split-Path $_ -Leaf)"
           } | Set-Content -LiteralPath $sumsFile
           gh release create $tag `
-            --title "StatusMod $ver" `
+            --title "Status Player $ver" `
             --notes-file $changelogFile `
             $assetFiles $sumsFile

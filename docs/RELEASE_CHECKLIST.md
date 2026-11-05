@@ -37,12 +37,12 @@ unverändert, das Flag bleibt also auch nach dem Stempeln `0x0000`.
 - [x] Release-Builds erstellt; Forge 1.21.11 wegen Speicherlimit als Einzelbuild erstellt
 - [x] Build-Ausgabe **und** isoliertes Gradle-Home liegen auf `D:\Mods\StatusMod` (C: hat nur ~3 GB frei): `-OutputDir "D:\Mods\StatusMod"`
 - [x] Fabric-26.x-Builds (plain javac) schreiben nach `-OutputDir` statt immer nach `dist/multiversion`; Alt-JARs im Zielordner werden vorher gelöscht (sonst gilt ein nicht neu gebautes, evtl. schon obfuskiertes JAR als `ok`)
-- [ ] `.\scripts\ci\verify-jars.ps1 -DistDir "D:\Mods\StatusMod"` → **24/24 OK**
-- [ ] 24 × `Statusmod-<version>-<loader>-<mc>.jar` unter `D:\Mods\StatusMod\<loader>\<mc>\` (CI baut weiter nach `dist/multiversion`)
+- [x] `.\scripts\ci\verify-jars.ps1 -DistDir "D:\Mods\StatusMod"` → **24/24 OK** (2026-11-05)
+- [x] 24 × `Statusmod-<version>-<loader>-<mc>.jar` unter `D:\Mods\StatusMod\<loader>\<mc>\` (CI baut weiter nach `dist/multiversion`)
 - [x] Build-Tag in allen 24 JARs geprüft (`BUILD`/`VERSION` = `1.4.2`, `BUILD_ID` vorhanden)
 - [x] `statusmod-build.txt` in allen 24 JARs im Format `<version>-<loader>-<mc>-<sha8>`
 - [x] Lizenz in allen 4 Metadaten-Dateien = `Status Player License 1.0`, `statusmod-license.txt` im JAR
-- [ ] **A4 (Obfuskation) gelaufen** — `.\scripts\local\obfuscate-release.ps1 -InputDir "D:\Mods\StatusMod" -BackupDir "D:\Mods\StatusMod\a4-backup-<ts>"`, danach `stamp-build.ps1` automatisch (Obfuskation ändert die JAR-Datei, sonst passt `sha8` nicht mehr). Build-Ordner = Mirror-Ordner, also kein zweiter Kopierschritt
+- [x] **A4 (Obfuskation) gelaufen** — `.\scripts\local\obfuscate-release.ps1 -InputDir "D:\Mods\StatusMod" -BackupDir "D:\Mods\StatusMod-a4-backup-<ts>"`, danach `stamp-build.ps1` automatisch (Obfuskation ändert die JAR-Datei, sonst passt `sha8` nicht mehr). Build-Ordner = Mirror-Ordner, also kein zweiter Kopierschritt (Lauf 2026-11-05: 24 JARs, Backup `D:\Mods\StatusMod-a4-backup-20261105-140453`)
 
 ### 2b. A4-Details (Stand 2026-11-03)
 - [x] Nur `com.teufel.statusmod.**` obfuskiert (Klassennamen); MC/Mojang/Loader/Gson/Floodgate/LuckPerms unverändert
@@ -53,11 +53,12 @@ unverändert, das Flag bleibt also auch nach dem Stempeln `0x0000`.
 - [x] 78 eigene Klassen pro JAR (keine Klasse durch Obfuskation verloren), Metadaten/Ressourcen unverändert
 - [x] ZIP-Header: alle Einträge `flag 0x0000` (kein Data Descriptor) in allen 24 JARs; `META-INF/MANIFEST.MF` ist erster Eintrag
 - [x] ZIP-Validierung: 24/24 JARs lesbar über `java.util.jar.JarFile` (verify=true) mit CRC-Prüfung, 0 Abweichungen
-- [ ] Doppel-Obfuskations-Sperre + Backup vor Verarbeitung (`D:\Mods\StatusMod\a4-backup-*`)
-- [ ] SHA-256 über alle 24 JARs konsistent (Build schreibt direkt in den Mirror-Ordner, kein zweiter Abgleich nötig)
+- [x] Doppel-Obfuskations-Sperre + Backup vor Verarbeitung (`D:\Mods\StatusMod-a4-backup-20261105-140453`, ausserhalb des Input-Ordners)
+- [x] SHA-256 über alle 24 JARs konsistent (Build schreibt direkt in den Mirror-Ordner, kein zweiter Abgleich nötig; `verify-jars.ps1 -DistDir` prüft die gestempelten Build-Tags)
 - [x] Runtime-Test Fabric 26.2 mit obfuskiertem JAR: `RESULT: PASSED`
 - [x] Runtime-Test Forge 26.2 mit obfuskiertem JAR: `RESULT: PASSED`
 - [x] Runtime-Test NeoForge 26.2 mit obfuskiertem JAR: `RESULT: PASSED`
+- [x] CI obfuskiert ebenfalls: `scripts/ci/fetch-proguard.ps1` (SHA-256-gepinnt) + `obfuscate-release.ps1` laufen im Workflow **vor** `verify-jars.ps1` → Publish liefert obfuskierte JARs, nicht den Roh-Build
 
 ## 3. Tests
 
@@ -110,9 +111,11 @@ unverändert, das Flag bleibt also auch nach dem Stempeln `0x0000`.
 - [ ] GitHub Release angelegt (Changelog aus CHANGELOG.md, alle 24 JARs)
 - [x] Fleet NICHT im Release (`dist/multiversion` enthält 0 Fleet-JARs; Guard in `publish-all.ps1` bleibt)
 
-**Wichtig vor dem Publish:** Die CI baut frisch aus dem Quellcode und liefert **unobfuskierte**
-JARs. Wenn die veröffentlichten Dateien obfuskiert sein sollen, muss der Publish aus den lokalen
-`dist/multiversion`-Artefakten erfolgen (`publish-all.ps1` mit lokalem Pfad) statt aus dem CI-Build.
+**Wichtig vor dem Publish:** CI und lokaler Lauf obfuskieren jetzt identisch. Der Workflow lädt
+die ProGuard-Toolchain über `scripts/ci/fetch-proguard.ps1` (SHA-256-gepinnt) und ruft
+`obfuscate-release.ps1` **vor** `verify-jars.ps1` auf — Verify, Runtime-Tests und Publish sehen
+also dieselben obfuskierten JARs wie der lokale D:-Lauf. Die Backup-Kopie landet unter
+`$RUNNER_TEMP\a4-backup` und zählt deshalb nicht als zusätzliches Release-JAR.
 
 ## 8. Danach
 

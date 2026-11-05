@@ -44,6 +44,7 @@ param(
     [string]$ProguardJar = "$env:TEMP\opencode\proguard\proguard-base-7.10.0.jar",
     [string]$ProguardCoreJar = "$env:TEMP\opencode\proguard\proguard-core-9.4.0.jar",
     [string]$ProguardDependencyDir = "$env:TEMP\opencode\proguard",
+    [string]$AsmDir = "",
     [string]$AsmVersion = "9.10.1",
     [switch]$DryRun
 )
@@ -72,9 +73,15 @@ if (-not (Test-Path -LiteralPath $remapTool)) { throw "Remap tool not found: $re
 $proguardDeps = @(Get-ChildItem -LiteralPath $ProguardDependencyDir -File -Filter "*.jar" | ForEach-Object { $_.FullName })
 $proguardClasspath = (($ProguardJar, $ProguardCoreJar) + $proguardDeps | Select-Object -Unique) -join [IO.Path]::PathSeparator
 
-# ASM is only used by ObfuscateRemap.java; resolve the three artifacts from the Gradle cache.
+# ASM is only used by ObfuscateRemap.java. Explicit -AsmDir (CI, fetch-proguard.ps1)
+# wins; otherwise the three artifacts are resolved from the Gradle module cache.
 $asmCache = Join-Path $env:USERPROFILE ".gradle\caches\modules-2\files-2.1\org.ow2.asm"
 function Resolve-AsmJar([string]$Artifact) {
+    if (-not [string]::IsNullOrWhiteSpace($AsmDir)) {
+        $explicit = Join-Path $AsmDir "$Artifact-$AsmVersion.jar"
+        if (-not (Test-Path -LiteralPath $explicit)) { throw "ASM JAR missing in -AsmDir: $explicit" }
+        return (Resolve-Path -LiteralPath $explicit).Path
+    }
     $dir = Join-Path $asmCache $Artifact
     if (-not (Test-Path -LiteralPath $dir)) { throw "ASM cache directory missing: $dir" }
     $jar = Get-ChildItem -LiteralPath $dir -Recurse -File -Filter "$Artifact-$AsmVersion.jar" | Select-Object -First 1
