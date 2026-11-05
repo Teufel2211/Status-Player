@@ -1,5 +1,13 @@
 # Design-Spezifikation: Kopierschutz + Sync-Bestätigungscode
 
+> **ÜBERHOLT (2026-11-04) — Teil B (Sync-Code) ist überarbeitet.** Der Code wird weiterhin
+> vom Dashboard ausgestellt, aber vollständig intern ausgehandelt: kein `/status sync`
+> (`status`/`confirm <code>`/`reset`) mehr, keine Dashboard-Seite `/dashboard/sync`, keine
+> Route `/api/server/[server_id]/sync-code`. Jeder Server ohne Code bekommt ihn beim ersten
+> Pull (`sync_code_setup`), der Mod übernimmt ihn still; nach einem `403` paart er sich
+> automatisch neu. Maßgeblich ist `docs/RELEASE_CHECKLIST.md` + `dashboard/lib/sync-code.ts`.
+> Teil A (Lizenz, Fingerprint, Anti-Rebrand, Obfuskation) gilt unverändert.
+
 **Datum:** 2026-10-31
 **Status:** Vom Nutzer angefragt (Chat, 2026-10-31: „baue 2 sachen ein … die eine ist ein kopierschutz und reverse engineering schutz und das 2 ist eine bestätigungs code bei supabase sync so damit nicht jeder das einfach benutzen kann"). Entscheidungen im Chat bestätigt.
 **Betroffene Version:** 1.4.2 (auf `development`, noch nicht released)

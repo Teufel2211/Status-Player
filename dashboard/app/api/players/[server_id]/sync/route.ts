@@ -57,9 +57,8 @@ export async function POST(
   if (flagError) return serverError()
   if (!serverRow) return badRequest()
 
-  // Sync-Bestaetigungscode: ein kopiertes JAR mit kopierter config.json
-  // verliert hier den Zugang, sobald der Code im Dashboard zurueckgesetzt
-  // wurde. 403 ist eindeutig Sync-Code (requireApiKey liefert 401).
+  // Sync-Code: wird vollstaendig intern ausgehandelt (siehe lib/sync-code.ts).
+  // 403 ist eindeutig Sync-Code (requireApiKey liefert 401).
   const gate = await evaluateSyncCode(
     sb,
     serverRow as SyncCodeServerRow,
@@ -194,9 +193,9 @@ export async function GET(
   if (flagError) return serverError()
   if (!serverRow) return badRequest()
 
-  // Sync-Bestaetigungscode (siehe lib/sync-code.ts). Bei Alt-Servern ohne
-  // Code wird hier einmalig automatisch einer ausgestellt und in der Antwort
-  // mitgeliefert; der Mod uebernimmt ihn dann selbst.
+  // Sync-Code (siehe lib/sync-code.ts). Ohne Code stellt das Dashboard hier
+  // einmalig einen aus und liefert ihn in der Antwort mit; der Mod uebernimmt
+  // ihn selbst. Kein Admin-Eingriff noetig.
   const gate = await evaluateSyncCode(
     sb,
     serverRow as SyncCodeServerRow,

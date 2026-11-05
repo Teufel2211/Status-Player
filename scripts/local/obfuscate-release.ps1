@@ -18,10 +18,14 @@
     validates it, and only then replaces the release artifact.
 
 .PARAMETER InputDir
-    Release directory. Defaults to dist/multiversion.
+    Release directory. Defaults to dist/multiversion. Absolute paths are allowed.
 
 .PARAMETER MirrorDir
     Optional second directory receiving the validated JARs, e.g. D:\Mods\StatusMod.
+
+.PARAMETER BackupDir
+    Optional backup directory for the unobfuscated originals. Defaults to
+    dist/a4-backup-<timestamp> inside the repository.
 
 .PARAMETER ProguardJar
     Path to proguard-base.jar. Defaults to the approved local cache path.
@@ -36,6 +40,7 @@
 param(
     [string]$InputDir = "dist/multiversion",
     [string]$MirrorDir = "",
+    [string]$BackupDir = "",
     [string]$ProguardJar = "$env:TEMP\opencode\proguard\proguard-base-7.10.0.jar",
     [string]$ProguardCoreJar = "$env:TEMP\opencode\proguard\proguard-core-9.4.0.jar",
     [string]$ProguardDependencyDir = "$env:TEMP\opencode\proguard",
@@ -47,10 +52,17 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$inputRoot = (Resolve-Path (Join-Path $root $InputDir)).Path
+$inputCandidate = if ([IO.Path]::IsPathRooted($InputDir)) { $InputDir } else { Join-Path $root $InputDir }
+$inputRoot = (Resolve-Path -LiteralPath $inputCandidate).Path
 $version = (Get-Content -LiteralPath (Join-Path $root "version.txt") -Raw).Trim()
 $workRoot = Join-Path $env:TEMP "opencode\statusmod-a4-$([guid]::NewGuid().ToString('N'))"
-$backupRoot = Join-Path $root "dist\a4-backup-$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
+$backupRoot = if ([string]::IsNullOrWhiteSpace($BackupDir)) {
+    Join-Path $root "dist\a4-backup-$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
+} elseif ([IO.Path]::IsPathRooted($BackupDir)) {
+    $BackupDir
+} else {
+    Join-Path $root $BackupDir
+}
 $stampScript = Join-Path $PSScriptRoot "stamp-build.ps1"
 $remapTool = Join-Path $PSScriptRoot "ObfuscateRemap.java"
 

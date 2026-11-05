@@ -27,6 +27,8 @@ public final class SyncManager {
     private static final long SYNC_INTERVAL_MS = 30_000L;
     private static final long PULL_INTERVAL_MS = 15_000L;
     private static final long LOOP_TICK_MS = 2_000L;
+    /** Abstand zwischen zwei Paarungsversuchen mit dem Dashboard. */
+    private static final long PAIR_RETRY_MS = 60_000L;
     private static final int MAX_PLAYERS_PER_PUSH = 200;
     private static final int MAX_STATUS_LENGTH = 64;
     private static final int MAX_COLOR_LENGTH = 32;
@@ -41,7 +43,7 @@ public final class SyncManager {
     private static final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
     /** Aktueller Sync-Thread; nur setzen/loeschen, wenn man ihn besitzt. */
     private static volatile Thread threadRef = null;
-    /** Dashboard hat den Sync-Code abgelehnt (403) -> Loop beenden, bis neu bestaetigt. */
+    /** Dashboard hat den Sync-Code abgelehnt (403) -> neu paaren. */
     private static volatile boolean codeRejected = false;
     private static volatile boolean pushDirty = false;
     public static volatile String lastPushInfo = "-";
@@ -95,53 +97,65 @@ public final class SyncManager {
     }
 
     /**
-     * Ohne bestaetigten Code: genau ein Pull ohne x-sync-code. Server, die vor
-     * dem Sync-Code existierten, bekommen dabei automatisch einen Code vom
-     * Dashboard (Migration ohne Ausfall); neue Server antworten 403 und der
-     * Sync bleibt aus, bis der Admin einen Code bestaetigt. Der Code kommt
-     * ausschliesslich vom Dashboard - ein lokal erzeugter waere wertlos, weil
-     * eine Kopie sich selbst einen ausstellen koennte.
+     * Ohne Code: Paarung mit dem Dashboard (Pull ohne x-sync-code). Das
+     * Dashboard stellt dabei einen Code aus und liefert ihn als
+     * `sync_code_setup` mit; der Mod uebernimmt ihn selbst. Schlaegt das fehl
+     * (Dashboard nicht erreichbar, alter Stand), wird es in festen Abstaenden
+     * erneut versucht - ohne Admin-Eingriff.
      */
     private static void bootstrap() {
-        try {
-            pull(true);
-        } catch (Exception e) {
-            lastPullInfo = "ex: " + e.getMessage();
-        }
-        // Waehrend des Pulls gestoppt (z. B. /status sync reset)?
-        if (Thread.currentThread() != threadRef) return;
-        ModConfig config = StatusMod.getConfig();
-        if (config == null || config.syncCode == null || config.syncCode.isEmpty() || codeRejected) {
-            System.out.println("[StatusMod] Sync is not confirmed. Get a code from your dashboard and run: /status sync confirm <code>");
+        if (!pair()) {
             exitLoop();
             return;
         }
         loop();
     }
 
+    /**
+     * Handelt den Sync-Code mit dem Dashboard aus, bis einer uebernommen wurde.
+     * Laeuft, bis der Thread gestoppt wird oder ein Code vorliegt.
+     */
+    private static boolean pair() {
+        while (true) {
+            if (Thread.currentThread() != threadRef) return false;
+            ModConfig before = StatusMod.getConfig();
+            if (before == null) return false;
+            try {
+                pull(true);
+            } catch (Exception e) {
+                lastPullInfo = "ex: " + e.getMessage();
+            }
+            if (Thread.currentThread() != threadRef) return false;
+            ModConfig after = StatusMod.getConfig();
+            if (after != null && after.syncCode != null && !after.syncCode.isEmpty()) return true;
+            try {
+                Thread.sleep(PAIR_RETRY_MS);
+            } catch (InterruptedException e) {
+                return false;
+            }
+        }
+    }
+
+    /**
+     * Dashboard hat den Code abgelehnt (403), z. B. weil die Server-Daten
+     * zurueckgesetzt wurden. Der lokale Code wird verworfen und die Paarung
+     * automatisch neu ausgehandelt - kein Admin-Eingriff noetig.
+     */
+    private static boolean repair() {
+        codeRejected = false;
+        ModConfig cfg = StatusMod.getConfig();
+        if (cfg != null && cfg.syncCode != null && !cfg.syncCode.isEmpty()) {
+            cfg.syncCode = "";
+            cfg.save();
+        }
+        System.out.println("[StatusMod] Sync pairing lost, re-pairing automatically");
+        if (!pair()) return false;
+        System.out.println("[StatusMod] Sync pairing restored");
+        return true;
+    }
+
     public static void retryStart() {
         if (started.get()) return;
-        start();
-    }
-
-    /**
-     * Beendet den Sync-Loop (z. B. nach /status sync reset). Der Thread wird
-     * unterbrochen; ein spaeterer start() legt einen neuen an.
-     */
-    public static void stop() {
-        Thread t = threadRef;
-        threadRef = null;
-        started.set(false);
-        if (t != null) t.interrupt();
-    }
-
-    /**
-     * Neustart mit frisch geladenem Code: stop() + start(). Wichtig, weil ein
-     * laufender Loop den Code zwar pro Tick neu liest, aber nach einem 403
-     * bereits ausgestiegen ist.
-     */
-    public static void restart() {
-        stop();
         start();
     }
 
@@ -172,10 +186,13 @@ public final class SyncManager {
                 exitLoop();
                 return;
             }
-            // /status sync reset: Loop ohne Code nicht weiterlaufen lassen.
+            // Code fehlt (z. B. von Hand aus der config entfernt): neu paaren.
             if (loopCfg.syncCode == null || loopCfg.syncCode.isEmpty()) {
-                exitLoop();
-                return;
+                if (!repair()) {
+                    exitLoop();
+                    return;
+                }
+                continue;
             }
             // Erst pullen, dann pushen: Dashboard-Edits werden lokal angewendet,
             // bevor der naechste Push den (dann konsistenten) Stand hochlaedt.
@@ -188,7 +205,7 @@ public final class SyncManager {
                     System.out.println("[StatusMod] Sync pull failed: " + e.getMessage());
                 }
             }
-            if (codeRejected) {
+            if (codeRejected && !repair()) {
                 exitLoop();
                 return;
             }
@@ -202,7 +219,7 @@ public final class SyncManager {
                     System.out.println("[StatusMod] Sync push failed: " + e.getMessage());
                 }
             }
-            if (codeRejected) {
+            if (codeRejected && !repair()) {
                 exitLoop();
                 return;
             }
@@ -358,10 +375,9 @@ public final class SyncManager {
     }
 
     /**
-     * @param bootstrap true = einmaliger Erstkontakt ohne Code (Alt-Server-
-     *                  Migration). Ein 403 beendet dann nicht den Loop,
-     *                  sondern laesst {@link #bootstrap()} die Anleitung
-     *                  ausgeben.
+     * @param bootstrap true = Erstkontakt/Paarung ohne Code. Ein 403 beendet
+     *                  dann nicht den Loop, sondern laesst {@link #pair()}
+     *                  den Code erneut anfragen.
      */
     private static void pull(boolean bootstrap) {
         ModConfig config = StatusMod.getConfig();
@@ -418,9 +434,8 @@ public final class SyncManager {
             return;
         }
 
-        // Automatische Migration fuer Server, die vor dem Sync-Code existierten:
-        // das Dashboard legt einen Code an und liefert ihn genau hier aus.
-        // Nie einen bereits bestaetigten Code ueberschreiben.
+        // Paarung: das Dashboard stellt den Code aus und liefert ihn genau hier
+        // aus. Nie einen bereits vorhandenen Code ueberschreiben.
         if (json.has("sync_code_setup") && json.get("sync_code_setup").isJsonPrimitive()
                 && json.get("sync_code_setup").getAsJsonPrimitive().isString()) {
             adoptSyncCode(json.get("sync_code_setup").getAsString());
@@ -676,9 +691,10 @@ public final class SyncManager {
     }
 
     /**
-     * Uebernimmt einen vom Dashboard ausgestellten Sync-Code. Reload-Merge wie
-     * in SetupManager.pollPendingKey: die Platte ist die Wahrheit, nur dieses
-     * eine Feld wird gesetzt. Ein bereits bestaetigter Code wird nie
+     * Uebernimmt einen vom Dashboard ausgestellten Sync-Code (Paarung laeuft
+     * automatisch, ohne Admin-Eingriff). Reload-Merge wie in
+     * SetupManager.pollPendingKey: die Platte ist die Wahrheit, nur dieses
+     * eine Feld wird gesetzt. Ein bereits vorhandener Code wird nie
      * ueberschrieben.
      */
     private static void adoptSyncCode(String code) {
@@ -702,15 +718,13 @@ public final class SyncManager {
     }
 
     /**
-     * Dashboard hat den Code abgelehnt (403). Der Loop beendet sich danach;
-     * ein neuer Versuch passiert erst nach /status sync confirm. Der Code
-     * selbst wird nie geloggt.
+     * Dashboard hat den Code abgelehnt (403). Der Loop paart sich danach
+     * automatisch neu ({@link #repair()}). Der Code selbst wird nie geloggt.
      */
     private static void onCodeRejected(String op) {
         codeRejected = true;
-        if ("push".equals(op)) lastPushInfo = "code rejected";
-        else lastPullInfo = "code rejected";
-        System.out.println("[StatusMod] Sync rejected: code not confirmed. Get a new code from your dashboard and run: /status sync confirm <code>");
+        if ("push".equals(op)) lastPushInfo = "pairing";
+        else lastPullInfo = "pairing";
     }
 
     private static void applyOnline(MinecraftServer server, String uuidStr, PlayerSettings ps) {

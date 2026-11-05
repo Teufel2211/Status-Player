@@ -2,11 +2,13 @@
 
 Abhaken der Reihe nach. Alles auf `development` vorbereiten, erst ganz am Ende nach `main` mergen (CI feuert nur dort).
 
-**Stand 2026-11-03:** Lizenz (A1), Build-Fingerprint (A2), Anti-Rebrand-Prüfung (A3),
-Sync-Bestätigungscode (Teil B) und Obfuskation (A4) sind implementiert; Dashboard inkl.
-`/dashboard/sync` ist live, Migration `011_server_sync_codes` ist angewendet. Alle 24
-Release-JARs sind obfuskiert, neu gestempelt, nach `D:\Mods\StatusMod` gespiegelt und verifiziert.
-Offen: Tokens, Modrinth-Seite, Ingame-Abnahme, Merge nach `main`.
+**Stand 2026-11-04:** Lizenz (A1), Build-Fingerprint (A2), Anti-Rebrand-Prüfung (A3),
+Sync-Code (Teil B) und Obfuskation (A4) sind implementiert. Der Sync-Code läuft komplett
+intern: das Dashboard stellt ihn beim ersten Kontakt selbst aus, der Mod übernimmt ihn
+still (`sync_code_setup`) — keine Befehle, keine Dashboard-Seite, kein Admin-Eingriff.
+Migration `011_server_sync_codes` ist angewendet. Die 24 Release-JARs wurden am 2026-11-03
+obfuskiert, gestempelt, gespiegelt und verifiziert; nach dem Sync-Umbau (2026-11-04) müssen
+sie neu gebaut werden. Offen: Tokens, Modrinth-Seite, Ingame-Abnahme, Merge nach `main`.
 
 **A4 (Obfuskation) ist am 2026-11-03 erneut gelaufen.** ProGuard 7.10.0 erzeugt für Class-Version 69
 (Java 25) defekte StackMapTable-Frames (`VerifyError: Bad type on operand stack`). Deshalb
@@ -33,15 +35,16 @@ unverändert, das Flag bleibt also auch nach dem Stempeln `0x0000`.
 ## 2. Builds
 
 - [x] Release-Builds erstellt; Forge 1.21.11 wegen Speicherlimit als Einzelbuild erstellt
-- [x] `./scripts/ci/verify-jars.ps1` → **24/24 OK**
-- [x] `dist/multiversion` enthält 24 × `Statusmod-<version>-<loader>-<mc>.jar`
+- [x] Build-Ausgabe **und** isoliertes Gradle-Home liegen auf `D:\Mods\StatusMod` (C: hat nur ~3 GB frei): `-OutputDir "D:\Mods\StatusMod"`
+- [x] Fabric-26.x-Builds (plain javac) schreiben nach `-OutputDir` statt immer nach `dist/multiversion`; Alt-JARs im Zielordner werden vorher gelöscht (sonst gilt ein nicht neu gebautes, evtl. schon obfuskiertes JAR als `ok`)
+- [ ] `.\scripts\ci\verify-jars.ps1 -DistDir "D:\Mods\StatusMod"` → **24/24 OK**
+- [ ] 24 × `Statusmod-<version>-<loader>-<mc>.jar` unter `D:\Mods\StatusMod\<loader>\<mc>\` (CI baut weiter nach `dist/multiversion`)
 - [x] Build-Tag in allen 24 JARs geprüft (`BUILD`/`VERSION` = `1.4.2`, `BUILD_ID` vorhanden)
 - [x] `statusmod-build.txt` in allen 24 JARs im Format `<version>-<loader>-<mc>-<sha8>`
 - [x] Lizenz in allen 4 Metadaten-Dateien = `Status Player License 1.0`, `statusmod-license.txt` im JAR
-- [x] **A4 (Obfuskation) gelaufen** — `.\scripts\local\obfuscate-release.ps1 -MirrorDir D:\Mods\StatusMod`, danach `stamp-build.ps1` automatisch (Obfuskation ändert die JAR-Datei, sonst passt `sha8` nicht mehr)
+- [ ] **A4 (Obfuskation) gelaufen** — `.\scripts\local\obfuscate-release.ps1 -InputDir "D:\Mods\StatusMod" -BackupDir "D:\Mods\StatusMod\a4-backup-<ts>"`, danach `stamp-build.ps1` automatisch (Obfuskation ändert die JAR-Datei, sonst passt `sha8` nicht mehr). Build-Ordner = Mirror-Ordner, also kein zweiter Kopierschritt
 
 ### 2b. A4-Details (Stand 2026-11-03)
-
 - [x] Nur `com.teufel.statusmod.**` obfuskiert (Klassennamen); MC/Mojang/Loader/Gson/Floodgate/LuckPerms unverändert
 - [x] Keep-Regeln: Loader-Entrypoints, `ClickablePlayerHeadMenu`, `StatusModAPI`, `StatusMod`, `platform.**` inkl. ServiceLoader-Impls, Gson-Modelle (`ModConfig`, `PlayerSettings`, `BlockedPlayers$BlockEntry`, `WarningStore$WarnInfo`, `ServerPresets$ServerPreset`, `CustomPresets$*`)
 - [x] Keine Methoden-/Feld-Umbenennung und keine String-Verschlüsselung (bewusste Entscheidung: kein Override-/Reflection-/Gson-Risiko)
@@ -50,8 +53,8 @@ unverändert, das Flag bleibt also auch nach dem Stempeln `0x0000`.
 - [x] 78 eigene Klassen pro JAR (keine Klasse durch Obfuskation verloren), Metadaten/Ressourcen unverändert
 - [x] ZIP-Header: alle Einträge `flag 0x0000` (kein Data Descriptor) in allen 24 JARs; `META-INF/MANIFEST.MF` ist erster Eintrag
 - [x] ZIP-Validierung: 24/24 JARs lesbar über `java.util.jar.JarFile` (verify=true) mit CRC-Prüfung, 0 Abweichungen
-- [x] Doppel-Obfuskations-Sperre + Backup vor Verarbeitung (`dist/a4-backup-*`)
-- [x] SHA-256 `dist/multiversion` ↔ `D:\Mods\StatusMod`: 0 Abweichungen
+- [ ] Doppel-Obfuskations-Sperre + Backup vor Verarbeitung (`D:\Mods\StatusMod\a4-backup-*`)
+- [ ] SHA-256 über alle 24 JARs konsistent (Build schreibt direkt in den Mirror-Ordner, kein zweiter Abgleich nötig)
 - [x] Runtime-Test Fabric 26.2 mit obfuskiertem JAR: `RESULT: PASSED`
 - [x] Runtime-Test Forge 26.2 mit obfuskiertem JAR: `RESULT: PASSED`
 - [x] Runtime-Test NeoForge 26.2 mit obfuskiertem JAR: `RESULT: PASSED`
@@ -66,11 +69,11 @@ unverändert, das Flag bleibt also auch nach dem Stempeln `0x0000`.
 ### 3b. Schutzfunktionen (1.4.2 neu)
 
 - [ ] Anti-Rebrand: Test-JAR mit geänderter `fabric.mod.json`-Mod-ID → Start bricht ab, Logzeile `This build has been modified or rebranded. Refusing to start.`, `/modinfo` erklärt den Zustand
-- [ ] Sync-Code: Alt-Server (vor `2026-11-01`) bekommt beim ersten Pull automatisch einen Code (`[StatusMod] Sync code adopted from dashboard.`) und synct weiter — **kein Ausfall**
-- [ ] Sync-Code: neuer Server ohne Code → `403`, Log `Sync is not confirmed. … /status sync confirm <code>`, kein Push
-- [ ] `/status sync status` zeigt Code-Status; `/status sync confirm <code>` aktiviert den Sync sofort
-- [ ] Dashboard `/dashboard/sync`: Code erzeugen (einmalige Anzeige), Copy, Reset mit Sicherheitsabfrage
-- [ ] Nach Reset: Mod bekommt `403` und stoppt; Server wird **nicht** automatisch neu migriert
+- [ ] Sync-Paarung (intern, ohne Befehl): Server ohne Code bekommt beim ersten Pull automatisch einen Code (`[StatusMod] Sync code adopted from dashboard.`) und synct weiter — **kein Ausfall**
+- [ ] Neuer Server (auch nach `2026-11-01`): erste Anfrage ohne Code → Dashboard stellt Code aus (`sync_code_setup`), Mod übernimmt ihn still, Push läuft danach
+- [ ] Kein `/status sync …` mehr vorhanden (Sync-Status steht in `/status config show` / Log)
+- [ ] Dashboard hat keine Sync-Seite mehr (Sidebar ohne „Sync"), `/api/server/[server_id]/sync-code` ist weg
+- [ ] Nach Reset der Server-Daten im Dashboard: Mod bekommt `403` → Log `Sync pairing lost, re-pairing automatically` → holt sich automatisch einen neuen Code
 - [ ] `dashboardUrl` hat keinen Default mehr — frische Installation synct erst nach Eintrag der URL
 
 ## 4. Tokens & Secrets
@@ -82,12 +85,12 @@ unverändert, das Flag bleibt also auch nach dem Stempeln `0x0000`.
 
 ## 5. Dashboard live
 
-- [x] `vercel deploy --prod` — deployt am 2026-11-01 inkl. `/dashboard/sync` + `/api/server/[server_id]/sync-code`
+- [ ] `vercel deploy --prod` — **zwingend vor dem Mod-Rollout** (das neue Dashboard stellt den Sync-Code ohne Code-Anfrage aus; der alte Stand antwortet sonst `403`)
 - [x] `/api/health` → `healthy`, `database: connected`, `previous_secret_active: false`
 - [x] Migration `011_server_sync_codes` angewendet (6 Spalten auf `public.servers`, Bestandszeilen unverändert)
 - [ ] Login + Owner-Login einmal durchspielen — **brauchst du**
 - [ ] Config-Pull auf Testserver prüfen — **brauchst du**
-- [ ] Sync-Seite einmal als Owner durchklicken (Code erzeugen → ingame bestätigen → Reset) — **brauchst du**
+- [ ] Sync ohne Eingriff prüfen: Testserver mit neuem JAR synct ohne Code-Befehl, Dashboard zeigt Spieler — **brauchst du**
 
 ## 6. Offenlegung (Modrinth, vor Upload!)
 

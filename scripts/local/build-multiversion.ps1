@@ -403,7 +403,7 @@ $gradleProps = Join-Path $root "gradle.properties"
 $matrixFile = Join-Path $root $MatrixPath
 $packFormatFile = Join-Path $root $PackFormatMapPath
 $loaderVersionsFile = Join-Path $root $LoaderVersionsPath
-$outputRoot = Join-Path $root $OutputDir
+$outputRoot = if ([IO.Path]::IsPathRooted($OutputDir)) { $OutputDir } else { Join-Path $root $OutputDir }
 $reportFile = Join-Path $outputRoot "build-report.json"
 $markdownReportFile = Join-Path $outputRoot "build-report.md"
 $modVersion = (Get-Content -LiteralPath (Join-Path $root "version.txt") -Raw).Trim()
@@ -983,15 +983,18 @@ try {
             # (Loader/fabric26.1) no longer exists.
             if ($isFabricExtra) {
                 $plainScript = Join-Path $PSScriptRoot "build-fabric26-plain.ps1"
+                $artifactPath = Join-Path $versionOut "Statusmod-$modVersion-$loader-$mc.jar"
+                # Ein Altstand im Zielordner (z. B. obfuskiertes Release-JAR) darf den
+                # Erfolgs-Check nicht erfuellen - sonst gilt ein nicht gebautes JAR als "ok".
+                if (Test-Path -LiteralPath $artifactPath) { Remove-Item -LiteralPath $artifactPath -Force }
                 $prevEap = $ErrorActionPreference
                 $ErrorActionPreference = "Continue"
                 try {
-                    & $plainScript -McVersion $mc -ModVersion $modVersion -JavaHome $resolvedFabricJava25Home
+                    & $plainScript -McVersion $mc -ModVersion $modVersion -JavaHome $resolvedFabricJava25Home -OutRoot (Join-Path $outputRoot "fabric")
                 } finally {
                     $ErrorActionPreference = $prevEap
                 }
                 $exit = if (Test-Path Variable:\LASTEXITCODE) { $LASTEXITCODE } else { 0 }
-                $artifactPath = Join-Path $versionOut "Statusmod-$modVersion-$loader-$mc.jar"
                 if (($exit -eq 0) -and (Test-Path -LiteralPath $artifactPath)) {
                     $results.Add([pscustomobject]@{
                         loader = $loader

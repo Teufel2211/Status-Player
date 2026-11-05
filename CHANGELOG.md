@@ -30,6 +30,11 @@ Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improve
 - `/bug` now accepts up to 3 screenshots per report: attach them in-game (screenshot picker) or upload them in the browser via the link in chat (works for vanilla clients and Bedrock players too). Images show up as thumbnails in the dashboard inbox.
 - Mod menu links: the Website and Issues buttons now open the Modrinth project page and the GitHub issue tracker instead of being greyed out.
 - Release builds are obfuscated: internal class names are shortened and debug information (source file names, line numbers, local variable names) is removed. Loader entrypoints, the public API, the dashboard sync and all commands behave unchanged.
+- Dashboard sync pairs itself: on first contact the dashboard issues the sync code and the mod adopts it in the background. No console command and no dashboard page are needed, and a lost pairing re-connects automatically.
+
+### Removed
+
+- `/status sync` (including `sync status`, `sync confirm <code>` and `sync reset`) and the dashboard "Sync" page: the sync code is handled internally now, so there is nothing to confirm, inspect or reset by hand.
 
 ## 1.4.1 - 2026-10-15
 

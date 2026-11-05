@@ -47,8 +47,7 @@ Legend: `(admin)` needs OP level (default 4, see `adminOpLevel`) or the `statusm
 - `/status admin mute <player> <minutes>` / `/status admin unmute <player>` — mute from StatusMod
 - `/status badge <player> <text> [color]` — staff badge; `/status badge clear <player>`
 - `/status feature list` / `/status feature <key> <on|off>` — toggles: `status badge afk block mute presets code sync bug warn slowmode`
-- `/status config show` / `/status config reload` — view/reload config
-- `/status sync` — sync wiring + last push/pull (shows key prefix only)
+- `/status config show` / `/status config reload` — view/reload config (also shows whether the dashboard sync is on)
 - `/status apikey <key>` — store dashboard API key (**prefer console**: typed commands land in the server log)
 - `/status setup-secret <secret>` — store dashboard setup secret (same warning)
 - `/status transfer <server-id> <key>` — copy statuses from another server on the same dashboard

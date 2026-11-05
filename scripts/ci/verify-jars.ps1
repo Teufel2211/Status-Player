@@ -1,10 +1,12 @@
-param()
+param(
+    [string]$DistDir = "dist\multiversion"
+)
 
 $ErrorActionPreference = "Stop"
 
 $root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $modVersion = (Get-Content (Join-Path $root "version.txt") -Raw).Trim()
-$distDir = Join-Path $root "dist\multiversion"
+$distDir = if ([IO.Path]::IsPathRooted($DistDir)) { $DistDir } else { Join-Path $root $DistDir }
 
 if (-not (Test-Path $distDir)) {
     throw "dist directory not found: $distDir"

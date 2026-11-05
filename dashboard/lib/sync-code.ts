@@ -1,21 +1,13 @@
 import crypto from "crypto"
 import { hashArgon2id, verifyArgon2id, encryptSecret, decryptSecret } from "./hash"
 
-// Der Mod erwartet genau 8 Zeichen (A-Z, a-z, 0-9) – siehe
-// StatusCommand.confirmSyncCode. Das Alphabet laesst 0/O und 1/I/L weg,
-// damit der Code am Telefon oder aus dem Chat abgetippt werden kann.
+// Der Mod erwartet genau 8 Zeichen (A-Z, a-z, 0-9). Das Alphabet laesst 0/O
+// und 1/I/L weg, damit der Code im Log/Support-Fall eindeutig lesbar bleibt.
 const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
 const SYNC_CODE_LENGTH = 8
 
-/**
- * Server, die vor diesem Zeitpunkt angelegt wurden, bekommen beim ersten
- * Sync automatisch einen Code (kein Ausfall beim Update). Spaeter angelegte
- * Server muessen manuell paaren.
- */
-const AUTO_MIGRATION_CUTOFF_MS = Date.parse("2026-11-01T00:00:00Z")
-
 export const SYNC_CODE_SELECT =
-  "id, created_at, sync_code_hash, sync_code_pending_hash, sync_code_pending_secret, sync_code_created_at, sync_confirmed_at, sync_reset_at"
+  "id, created_at, sync_code_hash, sync_code_pending_hash, sync_code_pending_secret, sync_code_created_at, sync_confirmed_at"
 
 export type SyncCodeServerRow = {
   id: string
@@ -25,12 +17,11 @@ export type SyncCodeServerRow = {
   sync_code_pending_secret: string | null
   sync_code_created_at: string | null
   sync_confirmed_at: string | null
-  sync_reset_at: string | null
 }
 
 export type SyncCodeGate = {
   allowed: boolean
-  /** Nur bei der automatischen Migration: Klartext fuer genau diesen Pull. */
+  /** Nur bei der automatischen Paarung: Klartext fuer genau diesen Sync-Aufruf. */
   setupCode?: string
 }
 
@@ -42,21 +33,20 @@ export function generateSyncCode(): string {
   return out
 }
 
-function isLegacyServer(createdAt: string | null): boolean {
-  if (!createdAt) return true
-  const ts = Date.parse(createdAt)
-  if (Number.isNaN(ts)) return true
-  return ts < AUTO_MIGRATION_CUTOFF_MS
-}
-
 /**
  * Prueft den vom Mod gesendeten Code.
  *
+ * Der Code wird vollstaendig intern ausgehandelt - der Server-Admin muss nichts
+ * eingeben oder bestaetigen. Der Mod fragt beim ersten Kontakt ohne Code an,
+ * das Dashboard stellt einen aus und liefert ihn einmalig als
+ * `sync_code_setup` mit; der Mod speichert und schickt ihn ab dann selbst.
+ *
  * Reihenfolge:
  * 1. passt zum aktiven Hash            -> erlaubt
- * 2. passt zum ausstehenden Hash       -> erlaubt + befördern (alter Code stirbt)
- * 3. gar kein Code konfiguriert        -> automatische Migration fuer Alt-Server
- * 4. ausstehender Migrationscode da    -> Klartext erneut ausliefern (Mod hat
+ * 2. passt zum ausstehenden Hash       -> erlaubt + befoerdern (alter Code stirbt)
+ * 3. gar kein Code vorhanden           -> Code ausstellen und mitliefern
+ * 4. ausstehender Code da, Aufrufer schickt keinen Code
+ *                                      -> Klartext erneut ausliefern (Mod hat
  *                                         ihn noch nicht uebernommen)
  * 5. sonst                             -> 403 sync_not_confirmed
  */
@@ -89,12 +79,9 @@ export async function evaluateSyncCode(
     return { allowed: true }
   }
 
-  // Noch nie ein Code gesetzt: nur Alt-Server werden automatisch migriert.
-  // Ein bewusst zurueckgesetzter Server (sync_reset_at) wird NICHT erneut
-  // migriert - sonst waere "Sync zuruecksetzen" wirkungslos.
+  // Noch nie ein Code gesetzt: dieser Aufruf ist die Paarung. Der Code wird
+  // ausgestellt, verschluesselt hinterlegt und einmalig ausgeliefert.
   if (!active && !pending) {
-    if (row.sync_reset_at) return { allowed: false }
-    if (!isLegacyServer(row.created_at)) return { allowed: false }
     const code = generateSyncCode()
     const nowIso = new Date().toISOString()
     const { error } = await sb
@@ -110,9 +97,9 @@ export async function evaluateSyncCode(
     return { allowed: true, setupCode: code }
   }
 
-  // Migration laeuft, Mod hat den Code noch nicht uebernommen. Nur ausliefern,
+  // Paarung laeuft, Mod hat den Code noch nicht uebernommen. Nur ausliefern,
   // wenn der Aufrufer gar keinen Code geschickt hat (sonst koennte ein Client
-  // mit falschem Code den Migrationscode ueberschreiben).
+  // mit falschem Code den Paarungscode ueberschreiben).
   if (!provided && row.sync_code_pending_secret) {
     const code = decryptSecret(row.sync_code_pending_secret)
     if (code) return { allowed: true, setupCode: code }

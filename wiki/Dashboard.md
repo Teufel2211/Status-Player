@@ -11,7 +11,7 @@ The optional web dashboard connects your server(s) for live sync, player managem
 ## Sync
 
 - Two-way, every ~30s (push) / ~15s (pull) over HTTPS: status, color, avatar, settings, mutes, blocks, warnings, chat slowmode, server presets, online presence.
-- Toggle with `/status feature … sync`; inspect with `/status sync` (key shown as prefix only).
+- Toggle with `/status feature … sync`; the pairing code is exchanged automatically in the background, nothing to confirm.
 - Local JSON stays source of truth — sync is best-effort and never deletes local data.
 - Transfer statuses between servers on the same dashboard: `/status transfer <server-id> <key>`.
 - Admin dashboard: the owner can disable StatusMod per server or for all servers. While disabled, status display, AFK, moderation, commands and push sync are off; the mod keeps polling so re-enabling applies within 15 seconds without a restart. `/modinfo` stays available and reports the state.

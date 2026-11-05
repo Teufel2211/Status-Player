@@ -100,12 +100,6 @@ public class StatusCommand {
         statusTree = statusTree.then(Commands.literal("transfer")
         .then(Commands.argument("server", StringArgumentType.word())
         .then(Commands.argument("key", StringArgumentType.word()).executes(ctx -> { return transferFrom(ctx.getSource(), StringArgumentType.getString(ctx, "server"), StringArgumentType.getString(ctx, "key")); }))));
-        statusTree = statusTree.then(Commands.literal("sync")
-        .executes(ctx -> { showSyncStatus(ctx.getSource()); return 1; })
-        .then(Commands.literal("status").executes(ctx -> { showSyncStatus(ctx.getSource()); return 1; }))
-        .then(Commands.literal("confirm")
-        .then(Commands.argument("code", StringArgumentType.word()).executes(ctx -> { return confirmSyncCode(ctx.getSource(), StringArgumentType.getString(ctx, "code")); })))
-        .then(Commands.literal("reset").executes(ctx -> { return resetSyncCode(ctx.getSource()); })));
         statusTree = statusTree.then(Commands.literal("apikey")
         .then(Commands.argument("key", StringArgumentType.greedyString()).executes(ctx -> { return setApiKey(ctx.getSource(), StringArgumentType.getString(ctx, "key")); })));
         statusTree = statusTree.then(Commands.literal("transfer")
@@ -692,10 +686,6 @@ public class StatusCommand {
         } catch (Throwable ignored) {}
     }
 
-    /**
-     * Shows sync wiring + last results (admin only; key only as prefix).
-     * Helps diagnosing 401s (wrong key/server) without touching files.
-     */
     private static void showVersion(CommandSourceStack src) {
         // Checked in the executor on purpose: a .requires gate on the literal
         // would let non-admins fall through to the greedy /status <text>
@@ -705,99 +695,6 @@ public class StatusCommand {
             return;
         }
         CommandUtil.sendSuccess(src, Component.literal("Status Player " + StatusMod.VERSION + " (build " + StatusMod.BUILD + ")"), false);
-    }
-
-    private static void showSyncStatus(CommandSourceStack src) {
-        try {
-            if (!PermissionUtil.hasAdminPermission(src)) {
-                src.sendFailure(Component.literal("Du hast nicht genügend Rechte."));
-                return;
-            }
-            ModConfig c = StatusMod.getConfig();
-            if (c == null) {
-                src.sendFailure(Component.literal("Keine Konfiguration geladen."));
-                return;
-            }
-            String url = c.effectiveDashboardUrl();
-            String sid = c.serverId == null ? "" : c.serverId.trim();
-            String key = c.apiKey == null ? "" : c.apiKey.trim();
-            String code = c.syncCode == null ? "" : c.syncCode.trim();
-            String keyInfo = key.isEmpty() ? "nein" : "ja (" + key.substring(0, Math.min(6, key.length())) + "…)";
-            CommandUtil.sendSuccess(src, Component.literal("Sync-Status:"), false);
-            CommandUtil.sendSuccess(src, Component.literal(" Feature: " + (c.isEnabled("sync") ? "an" : "aus")), false);
-            CommandUtil.sendSuccess(src, Component.literal(" dashboard: " + (url.isEmpty() ? "-" : url)), false);
-            CommandUtil.sendSuccess(src, Component.literal(" serverId: " + (sid.isEmpty() ? "-" : sid)), false);
-            CommandUtil.sendSuccess(src, Component.literal(" apiKey: " + keyInfo), false);
-            // Der Code selbst wird nie angezeigt oder geloggt.
-            CommandUtil.sendSuccess(src, Component.literal(" sync-Code: " + (code.isEmpty() ? "nicht bestätigt" : "bestätigt")), false);
-            if (code.isEmpty()) {
-                CommandUtil.sendSuccess(src, Component.literal(" Bestätigen mit: /status sync confirm <code> (Code aus dem Dashboard)"), false);
-            }
-            CommandUtil.sendSuccess(src, Component.literal(" letzter Push: " + SyncManager.lastPushInfo), false);
-            CommandUtil.sendSuccess(src, Component.literal(" letzter Pull: " + SyncManager.lastPullInfo), false);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * Speichert den vom Dashboard ausgestellten Sync-Code (admin only).
-     * Der Code wird nie geloggt oder zurueckgegeben.
-     */
-    private static int confirmSyncCode(CommandSourceStack src, String rawCode) {
-        try {
-            if (!PermissionUtil.hasAdminPermission(src)) {
-                src.sendFailure(Component.literal("Du hast nicht genügend Rechte."));
-                return 0;
-            }
-            String code = rawCode == null ? "" : rawCode.trim();
-            while (code.length() >= 2 && ((code.startsWith("\"") && code.endsWith("\"")) || (code.startsWith("'") && code.endsWith("'")))) {
-                code = code.substring(1, code.length() - 1).trim();
-            }
-            if (!code.matches("[A-Za-z0-9]{8}")) {
-                src.sendFailure(Component.literal("Ungültiger Code. Erwartet werden 8 Zeichen (A-Z, a-z, 0-9)."));
-                return 0;
-            }
-            ModConfig c = StatusMod.getConfig();
-            if (c == null) {
-                src.sendFailure(Component.literal("Keine Konfiguration geladen."));
-                return 0;
-            }
-            c.syncCode = code;
-            c.save();
-            AuditLogger.log(src.getTextName(), "SYNC_CONFIRM", "-", "code=confirmed");
-            SyncManager.restart();
-            CommandUtil.sendSuccess(src, Component.literal("Sync-Code bestätigt. Der Sync startet jetzt."), false);
-            return 1;
-        } catch (Exception e) {
-            e.printStackTrace();
-            try { src.sendFailure(Component.literal("Fehler beim Speichern des Sync-Codes.")); } catch (Exception ignore) {}
-            return 0;
-        }
-    }
-
-    /** Loescht den Sync-Code und stoppt den Sync (admin only). */
-    private static int resetSyncCode(CommandSourceStack src) {
-        try {
-            if (!PermissionUtil.hasAdminPermission(src)) {
-                src.sendFailure(Component.literal("Du hast nicht genügend Rechte."));
-                return 0;
-            }
-            ModConfig c = StatusMod.getConfig();
-            if (c == null) {
-                src.sendFailure(Component.literal("Keine Konfiguration geladen."));
-                return 0;
-            }
-            c.syncCode = "";
-            c.save();
-            SyncManager.stop();
-            AuditLogger.log(src.getTextName(), "SYNC_RESET", "-", "code=cleared");
-            CommandUtil.sendSuccess(src, Component.literal("Sync-Code gelöscht. Der Sync ist gestoppt. Hole im Dashboard einen neuen Code und bestätige ihn mit /status sync confirm <code>."), false);
-            return 1;
-        } catch (Exception e) {
-            e.printStackTrace();
-            return 0;
-        }
     }
 
     private static int setSidebar(CommandSourceStack src, String value) {
