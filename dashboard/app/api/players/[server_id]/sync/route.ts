@@ -3,6 +3,7 @@ import { getServiceClient } from "@/lib/supabase"
 import { requireApiKey } from "@/lib/auth"
 import { validatePathUuid } from "@/lib/validators"
 import { evaluateSyncCode, SYNC_CODE_SELECT, type SyncCodeServerRow } from "@/lib/sync-code"
+import { attestGate, clearAttest, recordAttest, verifyAttest } from "@/lib/attest"
 import { z } from "zod"
 
 const PlayerSyncSchema = z.object({
@@ -51,7 +52,9 @@ export async function POST(
 
   const { data: serverRow, error: flagError } = await (sb as any)
     .from("servers")
-    .select(`${SYNC_CODE_SELECT}, mod_enabled`)
+    .select(
+      `${SYNC_CODE_SELECT}, mod_enabled, allow_dev_builds, attest_build_id, attest_key_id`
+    )
     .eq("id", params.server_id)
     .maybeSingle()
   if (flagError) return serverError()
@@ -78,6 +81,28 @@ export async function POST(
   if (serverRow.mod_enabled === false || fleetRow?.mod_enabled === false) {
     const mod_disabled_scope = fleetRow?.mod_enabled === false ? "global" : "server"
     return ok({ synced: 0, mod_enabled: false, mod_disabled_scope, ...setupField })
+  }
+
+  // Build-Attest (siehe lib/attest.ts): nur Builds, deren Manifest von unserem
+  // Release-Key signiert wurde, duerfen schreiben. 403 attest_required /
+  // attest_invalid => der Mod pausiert (kein Repair, kein Datenverlust).
+  const attest = attestGate(
+    await verifyAttest(sb, request),
+    serverRow.allow_dev_builds === true
+  )
+  if (!attest.allowed) return forbidden(attest.error)
+  if (attest.fields) {
+    // Nur schreiben, wenn Build oder Key neu ist: sonst erzeugt jeder
+    // 30-Sekunden-Sync ein UPDATE auf servers.
+    if (
+      serverRow.attest_build_id !== attest.fields.build_id ||
+      serverRow.attest_key_id !== attest.fields.key_id
+    ) {
+      await recordAttest(sb, params.server_id, attest.fields)
+    }
+  } else if (serverRow.attest_build_id) {
+    // Dev-Build nach erlaubtem Toggle: letzter verifizierter Build ist weg.
+    await clearAttest(sb, params.server_id)
   }
 
   let body: unknown
@@ -187,7 +212,7 @@ export async function GET(
 
   const { data: serverRow, error: flagError } = await (sb as any)
     .from("servers")
-    .select(`${SYNC_CODE_SELECT}, mod_enabled`)
+    .select(`${SYNC_CODE_SELECT}, mod_enabled, allow_dev_builds, attest_build_id, attest_key_id`)
     .eq("id", params.server_id)
     .maybeSingle()
   if (flagError) return serverError()
@@ -214,6 +239,25 @@ export async function GET(
     // laesst den Watermark stehen, damit Re-Enable den Rueckstand nachzieht.
     const mod_disabled_scope = fleetRow?.mod_enabled === false ? "global" : "server"
     return ok({ mod_enabled: false, mod_disabled_scope, server_time: new Date().toISOString(), ...setupField })
+  }
+
+  // Build-Attest: gleicher Vertrag wie im POST (siehe lib/attest.ts). Auch der
+  // Pull liefert Daten, deshalb gilt hier dieselbe Pruefung.
+  const attest = attestGate(
+    await verifyAttest(sb, request),
+    serverRow.allow_dev_builds === true
+  )
+  if (!attest.allowed) return forbidden(attest.error)
+  if (attest.fields) {
+    // Siehe POST: nur bei neuem Build/Key schreiben, nicht bei jedem Poll.
+    if (
+      serverRow.attest_build_id !== attest.fields.build_id ||
+      serverRow.attest_key_id !== attest.fields.key_id
+    ) {
+      await recordAttest(sb, params.server_id, attest.fields)
+    }
+  } else if (serverRow.attest_build_id) {
+    await clearAttest(sb, params.server_id)
   }
 
   let playerQuery = (sb as any)

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { apiFetch, getServerId } from "@/lib/client/auth"
+import { apiFetch, getRole, getServerId } from "@/lib/client/auth"
 import { useRealtimePlayers } from "@/lib/client/use-realtime"
 import { PlayerAvatar } from "@/components/player-avatar"
 
@@ -11,10 +11,21 @@ type HealthData = {
   timestamp: string
 }
 
+type BuildData = {
+  attest_build_id: string | null
+  attest_key_id: string | null
+  attest_verified_at: string | null
+  allow_dev_builds: boolean
+}
+
 export default function DashboardOverview() {
   const [health, setHealth] = useState<HealthData | null>(null)
   const [knownCount, setKnownCount] = useState<number | null>(null)
+  const [build, setBuild] = useState<BuildData | null>(null)
+  const [buildError, setBuildError] = useState<string | null>(null)
+  const [savingBuild, setSavingBuild] = useState(false)
   const { players: livePlayers, connection } = useRealtimePlayers()
+  const role = typeof window === "undefined" ? null : getRole()
 
   useEffect(() => {
     fetch("/api/health")
@@ -27,8 +38,36 @@ export default function DashboardOverview() {
         .then((r) => (r.ok ? r.json() : []))
         .then((d) => setKnownCount(Array.isArray(d) ? d.length : null))
         .catch(() => {})
+      apiFetch(`/api/server/${sid}/build`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d) setBuild(d); else setBuildError("Build-Status nicht verfügbar.") })
+        .catch(() => setBuildError("Build-Status nicht verfügbar."))
     }
   }, [])
+
+  async function toggleDevBuilds(next: boolean) {
+    const sid = getServerId()
+    if (!sid) return
+    setSavingBuild(true)
+    setBuildError(null)
+    try {
+      const res = await apiFetch(`/api/server/${sid}/build`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allow_dev_builds: next }),
+      })
+      if (!res.ok) {
+        setBuildError(res.status === 403 ? "Nur der Owner kann Dev-Builds freigeben." : "Speichern fehlgeschlagen.")
+        return
+      }
+      const data = await res.json()
+      setBuild((prev) => (prev ? { ...prev, allow_dev_builds: data.allow_dev_builds === true } : prev))
+    } catch {
+      setBuildError("Speichern fehlgeschlagen.")
+    } finally {
+      setSavingBuild(false)
+    }
+  }
 
   const live = connection === "connected"
 
@@ -114,6 +153,51 @@ export default function DashboardOverview() {
               </a>
             ))}
           </div>
+        )}
+      </div>
+
+      <div className="card mb-6">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div>
+            <div className="kicker mb-1">Mod-Build</div>
+            <h2 className="font-display font-semibold" style={{ color: "var(--text-primary)" }}>Echtheit des laufenden Builds</h2>
+          </div>
+          {build?.attest_build_id ? <span className="badge-green">signiert</span> : <span className="badge-neutral">unsigniert</span>}
+        </div>
+        {build === null ? (
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            {buildError ?? "Lade Build-Status…"}
+          </p>
+        ) : (
+          <>
+            <div className="font-mono text-sm break-all" style={{ color: "var(--text-primary)" }}>
+              {build.attest_build_id ?? "Kein verifizierter Build — der Server läuft mit einem Dev-Build oder hat sich noch nicht gemeldet."}
+            </div>
+            <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+              {build.attest_verified_at
+                ? `Verifiziert am ${new Date(build.attest_verified_at).toLocaleString("de-DE")} · Schlüssel ${build.attest_key_id ?? "—"}`
+                : "Noch keine Signatur geprüft."}
+            </p>
+            <label className="flex items-start gap-3 mt-4" style={{ cursor: role === "owner" && !savingBuild ? "pointer" : "default" }}>
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={build.allow_dev_builds}
+                disabled={role !== "owner" || savingBuild}
+                onChange={(e) => toggleDevBuilds(e.target.checked)}
+              />
+              <span>
+                <span className="text-sm font-medium block" style={{ color: "var(--text-primary)" }}>Dev-Builds erlauben</span>
+                <span className="text-xs block" style={{ color: "var(--text-muted)" }}>
+                  Nur für Testserver: Sync auch ohne signiertes Build-Manifest zulassen.
+                </span>
+              </span>
+            </label>
+            {role !== "owner" && (
+              <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>Nur der Owner kann das ändern.</p>
+            )}
+            {buildError && <p className="text-xs mt-2" style={{ color: "var(--red)" }}>{buildError}</p>}
+          </>
         )}
       </div>
 

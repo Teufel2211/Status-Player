@@ -30,6 +30,13 @@ export function getServerId(): string | null {
   return typeof payload?.server_id === "string" ? (payload.server_id as string) : null
 }
 
+export function getRole(): string | null {
+  const token = getAccessToken()
+  if (!token) return null
+  const payload = decodePayload(token)
+  return typeof payload?.role === "string" ? (payload.role as string) : null
+}
+
 export function isTokenExpired(): boolean {
   const token = getAccessToken()
   if (!token) return true

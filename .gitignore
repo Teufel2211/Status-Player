@@ -2,6 +2,10 @@
 .gradle/
 build/
 out/
+
+# Quellcode-Ausnahme: Next.js-Route-Ordner heisst "build" (kein Artefakt)
+!dashboard/app/api/server/*/build/
+!dashboard/app/api/server/*/build/**
 classes/
 .caches/
 daemon/
