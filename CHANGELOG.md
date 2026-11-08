@@ -16,6 +16,8 @@ Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improve
 - New `/bug <text>` command: report bugs right from the game. The report (player name, server, mod/MC version, loader) lands in the dashboard inbox of the server team. Needs a dashboard-connected server; can be toggled with `/status feature bug`.
 - New keybind (default `U`) opens the `/status` menu. Rebindable under Options → Controls → Key Binds → StatusMod.
 - Admin kill switch: disable StatusMod per server or globally from the admin dashboard. While disabled, status display, AFK, moderation, commands and sync push are off; the mod keeps polling, so re-enabling applies within 15 seconds without a restart. `/modinfo` still reports the state.
+- Server sync recovers on its own: after a network error or a dashboard outage the mod reconnects with backoff and pushes every change made in the meantime. Nothing is lost and no restart is needed.
+- Signed release builds: every release JAR carries a signed build manifest (Ed25519). The mod refuses to start when the manifest no longer matches its own content, and the dashboard only accepts sync from verified builds. The dashboard overview shows the running build and, for test servers, a "Dev-Builds erlauben" switch.
 
 ### Changed
 
@@ -31,6 +33,7 @@ Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improve
 - Mod menu links: the Website and Issues buttons now open the Modrinth project page and the GitHub issue tracker instead of being greyed out.
 - Release builds are obfuscated: internal class names are shortened and debug information (source file names, line numbers, local variable names) is removed. Loader entrypoints, the public API, the dashboard sync and all commands behave unchanged.
 - Dashboard sync pairs itself: on first contact the dashboard issues the sync code and the mod adopts it in the background. No console command and no dashboard page are needed, and a lost pairing re-connects automatically.
+- Sync works for any server size: players, mutes and blocks are pushed in chunks of 200, so the previous silent 200-player ceiling is gone.
 
 ### Removed
 

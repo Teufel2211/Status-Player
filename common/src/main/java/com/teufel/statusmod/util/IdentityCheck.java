@@ -129,9 +129,17 @@ public final class IdentityCheck {
         return null;
     }
 
+    /**
+     * Eigenes Artefakt (Release-JAR oder Klassenverzeichnis im Dev-Build) fuer
+     * die Attest-Pruefung. Nutzt dieselbe Aufloesung inklusive Marker-Guard wie
+     * die Identitaetspruefung, damit nie ein fremdes Classpath-JAR geprueft wird.
+     */
+    public static File ownArtifactFile() {
+        return ownArtifact();
+    }
+
     /** Locates this mod's own JAR (release) or classes directory (dev). */
-    private static File ownArtifact() {
-        File candidate = fromCodeSource();
+    private static File ownArtifact() {        File candidate = fromCodeSource();
         if (isOwnArtifact(candidate)) return candidate;
 
         candidate = fromClassResource();

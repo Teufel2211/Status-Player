@@ -1,5 +1,9 @@
 param(
-    [string]$DistDir = "dist\multiversion"
+    [string]$DistDir = "dist\multiversion",
+    # CI setzt das nach dem Signierschritt: dann muss jedes JAR ein gueltiges
+    # Build-Attest haben. Lokal (unobfuskierte Dev-Builds) wird das Attest nur
+    # geprueft, wenn es vorhanden ist.
+    [switch]$RequireAttest
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,6 +45,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $foundKeys = New-Object System.Collections.Generic.HashSet[string]
 $errors = 0
+$attestedJars = New-Object System.Collections.Generic.List[string]
 
 $pattern = "(?i)^Statusmod-$([Regex]::Escape($modVersion))-(fabric|forge|neoforge|quilt)-(\d+(?:\.\d+)*)\.jar$"
 
@@ -132,6 +137,45 @@ foreach ($jar in $jars) {
                 Write-Warning "   FAIL: statusmod-license.txt missing"
                 $errors++
             }
+
+            # Echtheitsnachweis: signiertes Build-Manifest (statusmod-attest.json
+            # + statusmod-attest.sig, beide im JAR-Root). Die kryptografische
+            # Pruefung laeuft gesammelt nach der Schleife.
+            $attestJson = $null
+            $attestSigBytes = -1
+            foreach ($entry in $zip.Entries) {
+                if ($entry.Name -eq "statusmod-attest.json") {
+                    $reader = [System.IO.StreamReader]::new($entry.Open())
+                    $attestJson = $reader.ReadToEnd()
+                    $reader.Close()
+                } elseif ($entry.Name -eq "statusmod-attest.sig") {
+                    $attestSigBytes = $entry.Length
+                }
+            }
+
+            if (-not [string]::IsNullOrEmpty($attestJson) -or $attestSigBytes -ge 0) {
+                if ([string]::IsNullOrEmpty($attestJson) -or $attestSigBytes -le 0) {
+                    Write-Warning "   FAIL: incomplete build attest (json and sig must both be present)"
+                    $errors++
+                } else {
+                    $attest = $attestJson | ConvertFrom-Json
+                    if ($attest.build_id -ne $buildId) {
+                        Write-Warning "   FAIL: attest build_id '$($attest.build_id)' does not match statusmod-build.txt '$buildId'"
+                        $errors++
+                    } elseif ([string]::IsNullOrEmpty($attest.key_id)) {
+                        Write-Warning "   FAIL: attest has no key_id"
+                        $errors++
+                    } else {
+                        Write-Host "   build attest build_id=$($attest.build_id) key=$($attest.key_id) OK"
+                        $attestedJars.Add($jar.FullName) | Out-Null
+                    }
+                }
+            } elseif ($RequireAttest) {
+                Write-Warning "   FAIL: build attest missing (statusmod-attest.json)"
+                $errors++
+            } else {
+                Write-Host "   build attest not present (unsigned build, use -RequireAttest to enforce)"
+            }
         } finally {
             $zip.Dispose()
         }
@@ -139,6 +183,46 @@ foreach ($jar in $jars) {
         Write-Warning "   FAIL: $($_.Exception.Message)"
         $errors++
     }
+}
+
+# Kryptografische Pruefung der Build-Attests (Ed25519 + Inhalts-Hashes) mit
+# derselben Implementierung, die auch die Mod beim Start nutzt.
+if ($attestedJars.Count -gt 0) {
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $node) {
+        if ($RequireAttest) {
+            Write-Warning "FAIL: node is required to verify build attest"
+            $errors += $attestedJars.Count
+        } else {
+            Write-Warning "node not found - skipping build attest signature check"
+        }
+    } else {
+        Write-Host "==> Verifying build attest signatures ($($attestedJars.Count) JARs)"
+        $signScript = Join-Path $root "scripts\ci\sign-build.mjs"
+        $nodeArgs = @($signScript, "--verify")
+        foreach ($attested in $attestedJars) { $nodeArgs += @("--jar", $attested) }
+        # node schreibt Fehler nach stderr; PS 5.1 macht daraus unter
+        # ErrorActionPreference=Stop eine terminierende Exception, bevor der
+        # Exit-Code geprueft werden kann.
+        $prevEap = $ErrorActionPreference
+        $nodeExit = 0
+        Push-Location $root
+        try {
+            $ErrorActionPreference = "Continue"
+            & node @nodeArgs 2>&1 | ForEach-Object { Write-Host "   $_" }
+            $nodeExit = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $prevEap
+            Pop-Location
+        }
+        if ($nodeExit -ne 0) {
+            Write-Warning "   FAIL: build attest verification failed"
+            $errors++
+        }
+    }
+} elseif ($RequireAttest) {
+    Write-Warning "FAIL: no JAR carries a build attest"
+    $errors++
 }
 
 $missed = $expected | Where-Object { -not $foundKeys.Contains($_) }

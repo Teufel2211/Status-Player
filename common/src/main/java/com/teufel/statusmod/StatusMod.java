@@ -45,6 +45,8 @@ public final class StatusMod {
     private static final AtomicBoolean initialized = new AtomicBoolean(false);
     /** True wenn die Anti-Rebrand-Pruefung fehlgeschlagen ist (Mod startet nicht). */
     private static volatile boolean refused = false;
+    /** Ergebnis der Attest-Pruefung; null solange init() nicht lief. */
+    public static volatile com.teufel.statusmod.attest.AttestResult attestation;
     /** Vom Dashboard gesteuerter Kill-Switch (siehe SyncManager.pull). */
     private static volatile boolean remoteDisabled = false;
     /** "global" oder "server": bestimmt die Chat-Meldung beim Join. */
@@ -74,6 +76,19 @@ public final class StatusMod {
             System.out.println("[StatusMod] Reason: " + identityFailure + " - run /modinfo for details.");
             return;
         }
+
+        // Echtheit: signiertes Build-Attest im JAR. Fehlt es (Dev-Build), startet
+        // der Mod ohne Sync-Attest; ist es vorhanden aber falsch, startet er nicht.
+        com.teufel.statusmod.attest.AttestResult attest =
+                com.teufel.statusmod.attest.Attestation.result();
+        if (attest.status == com.teufel.statusmod.attest.AttestResult.Status.INVALID) {
+            refused = true;
+            System.out.println("[StatusMod] This build failed integrity verification. Refusing to start.");
+            System.out.println("[StatusMod] Reason: " + attest.reason + " - run /modinfo for details.");
+            return;
+        }
+        attestation = attest;
+        System.out.println("[StatusMod] Attest: " + attest.describe());
 
         Platform platform = PlatformServices.getPlatform();
         config = ModConfig.load();

@@ -75,13 +75,25 @@ unverändert, das Flag bleibt also auch nach dem Stempeln `0x0000`.
 - [ ] Kein `/status sync …` mehr vorhanden (Sync-Status steht in `/status config show` / Log)
 - [ ] Dashboard hat keine Sync-Seite mehr (Sidebar ohne „Sync"), `/api/server/[server_id]/sync-code` ist weg
 - [ ] Nach Reset der Server-Daten im Dashboard: Mod bekommt `403` → Log `Sync pairing lost, re-pairing automatically` → holt sich automatisch einen neuen Code
-- [ ] `dashboardUrl` hat keinen Default mehr — frische Installation synct erst nach Eintrag der URL
+- [ ] `dashboardUrl` hat keinen Default mehr – frische Installation synct erst nach Eintrag der URL
+
+### 3c. Sync-Fallback + Build-Attest (1.4.2 neu)
+
+- [ ] Migration `012_attest.sql` angewendet (Tabelle `attest_keys` mit Key `2026-11`, 4 Spalten auf `public.servers`) – erledigt 2026-11-07
+- [x] GitHub-Secret `STATUSMOD_ATTEST_KEY` gesetzt (Private Key, Base64) – Public Key in `scripts/ci/attest-keys.json` + `AttestKeys.java`
+- [x] Sign-Schritt in CI (`sign-build.mjs --dir dist/multiversion`) läuft **nach** A4 und **vor** Verify; `verify-jars.ps1 -RequireAttest` prüft beide Attest-Entries
+- [ ] Signiertes Release-JAR: Start loggt `[StatusMod] Attest: verified (key 2026-11)`; Dashboard zeigt Build-ID + „verifiziert am"
+- [ ] Manipuliertes JAR (ein Byte in einer Klasse geändert): Start bricht ab, `[StatusMod] This build failed integrity verification. Refusing to start.`
+- [ ] Unsigned Dev-JAR: Sync liefert `403 attest_required`, Mod pausiert 15 min und repariert **nicht**; Owner-Toggle „Dev-Builds erlauben" lässt den Sync zu
+- [ ] Falsche Signatur / unbekannter `key_id`: `403 attest_invalid`, es wird nichts geschrieben
+- [ ] Dashboard-Ausfall: Testserver ändert Status, Dashboard kurz nicht erreichbar → nach Rückkehr ist die Änderung da (Backoff 30→300 s, kein Config-Cache)
+- [ ] Server mit >200 Spielern: Push läuft in Chunks, Tombstones nur im ersten Chunk, `lastPushed*` erst nach dem letzten Chunk
 
 ## 4. Tokens & Secrets
 
 - [ ] `.\scripts\ci\check-release-tokens.ps1` → Exit 0 (inkl. Modrinth-Auth via GET /user). ACHTUNG: `$env:`-Tokens gelten nur pro PowerShell-Sitzung — vor Publish neu setzen + Check erneut laufen lassen!
   - **Blockiert (2026-10-27):** `MODRINTH_TOKEN` = HTTP 401, `CURSEFORGE_API_KEY` = HTTP 403
-- [ ] CI-Secrets prüfen (GitHub → Settings → Secrets → Actions): `MODRINTH_TOKEN`, `MODRINTH_PROJECT_ID`, `CURSEFORGE_TOKEN`, `CURSEFORGE_PROJECT_ID` — **brauchst du**
+- [ ] CI-Secrets prüfen (GitHub → Settings → Secrets → Actions): `MODRINTH_TOKEN`, `MODRINTH_PROJECT_ID`, `CURSEFORGE_TOKEN`, `CURSEFORGE_PROJECT_ID`, `STATUSMOD_ATTEST_KEY` - **brauchst du**
 - [x] Keine *neuen* Secrets im Diff
 
 ## 5. Dashboard live

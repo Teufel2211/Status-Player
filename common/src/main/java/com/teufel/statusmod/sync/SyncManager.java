@@ -8,6 +8,8 @@ import com.google.gson.JsonParser;
 import com.teufel.statusmod.StatusMod;
 import com.teufel.statusmod.storage.ModConfig;
 import com.teufel.statusmod.storage.PlayerSettings;
+import com.teufel.statusmod.storage.SyncState;
+import com.teufel.statusmod.attest.AttestResult;
 import com.teufel.statusmod.util.CodeGenerator;
 import com.teufel.statusmod.util.ColorMapper;
 import com.teufel.statusmod.util.StatusTextUtil;
@@ -19,7 +21,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -41,6 +45,20 @@ public final class SyncManager {
             .version(HttpClient.Version.HTTP_1_1)
             .build();
     private static final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
+    /** Backoff-Deckel und Wartezeit nach Fehlern, die nur ein Admin beheben kann. */
+    private static final long MAX_BACKOFF_MS = 300_000L;
+    private static final long STOP_RETRY_MS = 15 * 60_000L;
+    private static final long MAX_RETRY_AFTER_MS = 300_000L;
+    /** Persistenter Sync-Zustand (Offline-Puffer-Merker). */
+    private static volatile SyncState state = new SyncState();
+    /** Nach Start/Paarung einmal den kompletten Stand hochladen. */
+    private static volatile boolean forceFullPush = true;
+    /** Grund, warum der Sync pausiert (attest/unauthorized/not_found); null = laeuft. */
+    private static volatile String stopReason = null;
+    /** Attest-Header (nur bei verifiziertem Build gesetzt). */
+    private static volatile String attestHeader = null;
+    private static volatile String attestSigHeader = null;
+    private static volatile String attestBuildId = null;
     /** Aktueller Sync-Thread; nur setzen/loeschen, wenn man ihn besitzt. */
     private static volatile Thread threadRef = null;
     /** Dashboard hat den Sync-Code abgelehnt (403) -> neu paaren. */
@@ -86,6 +104,13 @@ public final class SyncManager {
         boolean needsCode = config.syncCode == null || config.syncCode.isEmpty();
         if (!started.compareAndSet(false, true)) return;
         codeRejected = false;
+        stopReason = null;
+        forceFullPush = true;
+        state = SyncState.load();
+        initAttestHeaders();
+        if (state.pendingSince != 0L) {
+            System.out.println("[StatusMod] Sync: unsent changes from a previous session will be uploaded");
+        }
         Thread thread = new Thread(needsCode ? SyncManager::bootstrap : SyncManager::loop,
                 needsCode ? "statusmod-sync-bootstrap" : "statusmod-sync");
         thread.setDaemon(true);
@@ -151,7 +176,140 @@ public final class SyncManager {
         System.out.println("[StatusMod] Sync pairing lost, re-pairing automatically");
         if (!pair()) return false;
         System.out.println("[StatusMod] Sync pairing restored");
+        stopReason = null;
+        forceFullPush = true;
         return true;
+    }
+
+    /**
+     * Baut die Attest-Header einmalig auf. Ohne verifiziertes Attest (Dev-Build)
+     * bleiben sie leer; das Dashboard entscheidet dann ueber 403 attest_required.
+     */
+    private static void initAttestHeaders() {
+        AttestResult attest = StatusMod.attestation;
+        if (attest == null) return;
+        if (!attest.isVerified()) {
+            System.out.println("[StatusMod] Attest: " + attest.describe()
+                    + " - dashboard sync needs a verified release build");
+            return;
+        }
+        attestHeader = attest.headerValue();
+        attestSigHeader = attest.signatureValue();
+        attestBuildId = attest.buildId;
+    }
+
+    /** Exponentielles Backoff mit Jitter, gedeckelt auf {@link #MAX_BACKOFF_MS}. */
+    private static long backoffMs() {
+        int shift = Math.min(state.consecutiveFailures, 4);
+        long delay = Math.min(MAX_BACKOFF_MS, SYNC_INTERVAL_MS << shift);
+        double jitter = 0.8d + (Math.random() * 0.4d);
+        return (long) (delay * jitter);
+    }
+
+    /**
+     * Netz-/Serverfehler: Puffer bleibt lokal, naechster Versuch nach Backoff.
+     * Es wird nie etwas geloescht.
+     */
+    private static void onSyncFailure(String reason, long retryMs) {
+        long now = System.currentTimeMillis();
+        state.recordFailure(now, reason, now + retryMs);
+        state.save();
+        long seconds = Math.max(1L, retryMs / 1000L);
+        if (state.consecutiveFailures == 1) {
+            System.out.println("[StatusMod] Sync offline, buffering locally (attempt 1, retry in "
+                    + seconds + "s)");
+        } else {
+            System.out.println("[StatusMod] Sync still offline (attempt "
+                    + state.consecutiveFailures + ", retry in " + seconds + "s)");
+        }
+    }
+
+    /**
+     * Zustand, den nur ein Admin beheben kann: Sync pausiert und versucht es
+     * spaeter erneut, statt in einer 403-Schleife zu paaren.
+     */
+    private static void stopSync(String reason, String message) {
+        long now = System.currentTimeMillis();
+        state.recordFailure(now, reason, now + STOP_RETRY_MS);
+        state.save();
+        if (!reason.equals(stopReason)) {
+            System.out.println("[StatusMod] Sync stopped: " + message);
+        }
+        stopReason = reason;
+    }
+
+    /** Liest {@code {"error":"..."}} aus einer Fehlerantwort. */
+    private static String errorCode(String body) {
+        try {
+            JsonObject json = JsonParser.parseString(body).getAsJsonObject();
+            if (json.has("error") && json.get("error").isJsonPrimitive()) {
+                return json.get("error").getAsString();
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    /**
+     * Einheitliche Behandlung von Nicht-2xx-Antworten.
+     *
+     * @return true, wenn die Anfrage erfolgreich war
+     */
+    private static boolean handleFailure(int code, String body, HttpResponse<?> response, String op) {
+        String info = "push".equals(op) ? "push" : "pull";
+        if (code >= 200 && code < 300) return true;
+
+        if (code == 403) {
+            String error = errorCode(body);
+            if (error.startsWith("attest")) {
+                stopSync("attest", error
+                        + " - update the mod or enable dev builds in the dashboard");
+                if ("push".equals(info)) lastPushInfo = "attest";
+                else lastPullInfo = "attest";
+                return false;
+            }
+            onCodeRejected(info);
+            return false;
+        }
+        if (code == 401) {
+            stopSync("unauthorized", "API key rejected (401)");
+            if ("push".equals(info)) lastPushInfo = "401";
+            else lastPullInfo = "401";
+            return false;
+        }
+        if (code == 404) {
+            stopSync("not_found", "server not found in dashboard (404)");
+            if ("push".equals(info)) lastPushInfo = "404";
+            else lastPullInfo = "404";
+            return false;
+        }
+        if (code == 429) {
+            long retry = 60_000L;
+            try {
+                String header = response.headers().firstValue("Retry-After").orElse("");
+                if (!header.isEmpty()) {
+                    retry = Math.min(MAX_RETRY_AFTER_MS, Long.parseLong(header.trim()) * 1000L);
+                }
+            } catch (Exception ignored) {}
+            onSyncFailure("rate_limited", Math.max(30_000L, retry));
+            if ("push".equals(info)) lastPushInfo = "429";
+            else lastPullInfo = "429";
+            return false;
+        }
+
+        onSyncFailure("http_" + code, backoffMs());
+        if ("push".equals(info)) lastPushInfo = "HTTP " + code;
+        else lastPullInfo = "HTTP " + code;
+        return false;
+    }
+
+    /** "4m12s" / "38s" - nur fuer Logzeilen. */
+    private static String formatDuration(long ms) {
+        long seconds = Math.max(0L, ms / 1000L);
+        if (seconds < 60L) return seconds + "s";
+        long minutes = seconds / 60L;
+        long rest = seconds % 60L;
+        if (minutes < 60L) return minutes + "m" + rest + "s";
+        return (minutes / 60L) + "h" + (minutes % 60L) + "m";
     }
 
     public static void retryStart() {
@@ -194,6 +352,11 @@ public final class SyncManager {
                 }
                 continue;
             }
+            // Backoff/Pause: nach einem Fehler (oder einem Stopp-Grund, der nur
+            // ein Admin beheben kann) bis nextAttemptAt gar nichts senden.
+            if (state.nextAttemptAt > now) {
+                continue;
+            }
             // Erst pullen, dann pushen: Dashboard-Edits werden lokal angewendet,
             // bevor der naechste Push den (dann konsistenten) Stand hochlaedt.
             if ((now - lastPull) >= PULL_INTERVAL_MS) {
@@ -203,21 +366,48 @@ public final class SyncManager {
                 } catch (Exception e) {
                     lastPullInfo = "ex: " + e.getMessage();
                     System.out.println("[StatusMod] Sync pull failed: " + e.getMessage());
+                    onSyncFailure("network", backoffMs());
+                    continue;
                 }
             }
             if (codeRejected && !repair()) {
                 exitLoop();
                 return;
             }
-            if (pushDirty || (now - lastPush) >= SYNC_INTERVAL_MS) {
+            // Nach einem Ausfall oder Stopp immer erst den vollen Stand senden.
+            boolean full = forceFullPush || state.pendingSince != 0L;
+            if (!pushDirty && !full && (now - lastPush) < SYNC_INTERVAL_MS) continue;
+
+            lastPush = now;
+            Boolean ok;
+            try {
+                ok = push();
+            } catch (Exception e) {
+                lastPushInfo = "ex: " + e.getMessage();
+                System.out.println("[StatusMod] Sync push failed: " + e.getMessage());
+                onSyncFailure("network", backoffMs());
+                ok = Boolean.FALSE;
+            }
+            if (ok == null) {
+                // Nichts zu tun (Kill-Switch, unvollstaendige Config): Zustand
+                // unveraendert lassen, kein kuenstlicher Ausfall.
+                continue;
+            }
+            if (ok) {
+                long restoreAt = System.currentTimeMillis();
+                long outage = state.lastOutageMs(restoreAt);
                 pushDirty = false;
-                lastPush = now;
-                try {
-                    push();
-                } catch (Exception e) {
-                    lastPushInfo = "ex: " + e.getMessage();
-                    System.out.println("[StatusMod] Sync push failed: " + e.getMessage());
+                forceFullPush = false;
+                stopReason = null;
+                state.recordSuccess(restoreAt);
+                state.lastAttestBuildId = attestBuildId;
+                state.save();
+                if (outage > 0L) {
+                    System.out.println("[StatusMod] Sync restored after " + formatDuration(outage));
                 }
+            } else {
+                // Aenderung bleibt offen, naechster Versuch laut Backoff.
+                pushDirty = true;
             }
             if (codeRejected && !repair()) {
                 exitLoop();
@@ -226,30 +416,32 @@ public final class SyncManager {
         }
     }
 
-    private static void push() {
+    /**
+     * Laedt den lokalen Stand hoch.
+     *
+     * @return {@code null} wenn nichts zu senden ist (Kill-Switch, unvollstaendige
+     *         Config), sonst true bei Erfolg und false bei Fehler
+     */
+    private static Boolean push() {
         ModConfig config = StatusMod.getConfig();
-        if (config == null || StatusMod.storage == null) return;
+        if (config == null || StatusMod.storage == null) return null;
         // Kill-Switch: keine Schreibvorgaenge, solange der Fleet-Owner den
         // Server deaktiviert hat. Der Pull laeuft weiter (Flag-Erkennung).
         if (StatusMod.isRemoteDisabled()) {
             lastPushInfo = "disabled";
-            return;
+            return null;
         }
         String dashboardUrl = CodeGenerator.trimTrailingSlash(config.effectiveDashboardUrl());
-        if (!CodeGenerator.isSecureHttpUrl(dashboardUrl)) return;
-        if (!isValidUuid(config.serverId)) return;
+        if (!CodeGenerator.isSecureHttpUrl(dashboardUrl)) return null;
+        if (!isValidUuid(config.serverId)) return null;
         String endpoint = dashboardUrl + "/api/players/" + config.serverId + "/sync";
         String apiKey = config.apiKey;
         String syncCode = config.syncCode == null ? "" : config.syncCode.trim();
-        if (syncCode.isEmpty()) return;
+        if (syncCode.isEmpty()) return null;
 
-        JsonObject payload = new JsonObject();
-
-        JsonArray players = new JsonArray();
+        List<JsonObject> playerEntries = new ArrayList<>();
         Map<String, PlayerSettings> snapshot = StatusMod.storage.getAllSnapshot();
-        int count = 0;
         for (Map.Entry<String, PlayerSettings> e : snapshot.entrySet()) {
-            if (count >= MAX_PLAYERS_PER_PUSH) break;
             String uuid = e.getKey();
             PlayerSettings ps = e.getValue();
             JsonObject entry = new JsonObject();
@@ -282,91 +474,124 @@ public final class SyncManager {
                 settings.add("badge", b);
             }
             entry.add("settings", settings);
-            players.add(entry);
-            count++;
+            playerEntries.add(entry);
         }
-        payload.add("players", players);
 
-        JsonArray muted = new JsonArray();
         Map<String, Long> mutedAll = StatusMod.mutedPlayers == null
                 ? new HashMap<>() : StatusMod.mutedPlayers.getAllMuted();
         Set<String> pushedMuted = new java.util.HashSet<>(mutedAll.keySet());
-        for (Map.Entry<String, Long> e : mutedAll.entrySet()) {
-            JsonObject m = new JsonObject();
-            m.addProperty("uuid", e.getKey());
-            m.addProperty("muted_until", e.getValue());
-            muted.add(m);
-        }
         // Ingame-Unmute: Mutes, die im letzten erfolgreichen Push noch aktiv
         // waren, jetzt aber lokal fehlen, als Loeschmarker mitsenden. Sonst
         // bleibt die DB-Zeile stehen und der naechste Pull muted wieder.
         Set<String> mutedDeletes = new java.util.HashSet<>(lastPushedMuted);
         mutedDeletes.removeAll(pushedMuted);
-        for (String uuid : mutedDeletes) {
-            JsonObject m = new JsonObject();
-            m.addProperty("uuid", uuid);
-            m.addProperty("muted_until", 0L);
-            muted.add(m);
-        }
-        payload.add("muted", muted);
 
-        JsonArray blocked = new JsonArray();
         Map<String, com.teufel.statusmod.storage.BlockedPlayers.BlockEntry> blockedAll =
                 StatusMod.blockedPlayers == null
                 ? java.util.Collections.emptyMap() : StatusMod.blockedPlayers.getActiveEntries();
         Set<String> pushedBlocked = new java.util.HashSet<>(blockedAll.keySet());
-        for (Map.Entry<String, com.teufel.statusmod.storage.BlockedPlayers.BlockEntry> e : blockedAll.entrySet()) {
-            JsonObject b = new JsonObject();
-            b.addProperty("uuid", e.getKey());
-            b.addProperty("expires_at", e.getValue() == null ? 0L : Math.max(0L, e.getValue().until));
-            blocked.add(b);
-        }
         // Ingame-Unblock/abgelaufener Ignore: Zeile im Dashboard ebenfalls
         // entfernen (active=false), sonst blockiert der naechste Pull erneut.
         Set<String> blockedDeletes = new java.util.HashSet<>(lastPushedBlocked);
         blockedDeletes.removeAll(pushedBlocked);
-        for (String uuid : blockedDeletes) {
-            JsonObject b = new JsonObject();
-            b.addProperty("uuid", uuid);
-            b.addProperty("active", false);
-            blocked.add(b);
-        }
-        payload.add("blocked", blocked);
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(endpoint))
-                .timeout(Duration.ofSeconds(20))
-                .header("Content-Type", "application/json")
-                .header("x-api-key", apiKey)
-                .header("x-sync-code", syncCode)
-                .POST(HttpRequest.BodyPublishers.ofString(payload.toString()))
-                .build();
+        // Chunking: maximal 200 Eintraege pro Request (Schema-Limit im
+        // Dashboard). Ein Server mit mehr Spielern laedt so auch beim
+        // Nachhol-Push alles hoch, statt den Rest still zu verlieren.
+        int total = playerEntries.size();
+        int chunks = Math.max(1, (total + MAX_PLAYERS_PER_PUSH - 1) / MAX_PLAYERS_PER_PUSH);
+        for (int chunkIndex = 0; chunkIndex < chunks; chunkIndex++) {
+            int from = chunkIndex * MAX_PLAYERS_PER_PUSH;
+            int to = Math.min(total, from + MAX_PLAYERS_PER_PUSH);
+            List<JsonObject> chunk = playerEntries.subList(from, to);
+            Set<String> chunkUuids = new java.util.HashSet<>();
+            for (JsonObject entry : chunk) chunkUuids.add(entry.get("uuid").getAsString());
 
-        try {
-            HttpResponse<java.io.InputStream> response =
-                HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            JsonObject payload = new JsonObject();
+            JsonArray players = new JsonArray();
+            for (JsonObject entry : chunk) players.add(entry);
+            payload.add("players", players);
+
+            JsonArray muted = new JsonArray();
+            for (Map.Entry<String, Long> e : mutedAll.entrySet()) {
+                if (!chunkUuids.contains(e.getKey())) continue;
+                JsonObject m = new JsonObject();
+                m.addProperty("uuid", e.getKey());
+                m.addProperty("muted_until", e.getValue());
+                muted.add(m);
+            }
+            if (chunkIndex == 0) {
+                for (String uuid : mutedDeletes) {
+                    JsonObject m = new JsonObject();
+                    m.addProperty("uuid", uuid);
+                    m.addProperty("muted_until", 0L);
+                    muted.add(m);
+                }
+            }
+            payload.add("muted", muted);
+
+            JsonArray blocked = new JsonArray();
+            for (Map.Entry<String, com.teufel.statusmod.storage.BlockedPlayers.BlockEntry> e : blockedAll.entrySet()) {
+                if (!chunkUuids.contains(e.getKey())) continue;
+                JsonObject b = new JsonObject();
+                b.addProperty("uuid", e.getKey());
+                b.addProperty("expires_at", e.getValue() == null ? 0L : Math.max(0L, e.getValue().until));
+                blocked.add(b);
+            }
+            if (chunkIndex == 0) {
+                for (String uuid : blockedDeletes) {
+                    JsonObject b = new JsonObject();
+                    b.addProperty("uuid", uuid);
+                    b.addProperty("active", false);
+                    blocked.add(b);
+                }
+            }
+            payload.add("blocked", blocked);
+
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                    .uri(URI.create(endpoint))
+                    .timeout(Duration.ofSeconds(20))
+                    .header("Content-Type", "application/json")
+                    .header("x-api-key", apiKey)
+                    .header("x-sync-code", syncCode)
+                    .POST(HttpRequest.BodyPublishers.ofString(payload.toString()));
+            addAttestHeaders(builder);
+
+            HttpResponse<java.io.InputStream> response;
             int code;
-            try (java.io.InputStream in = response.body()) {
+            String body = "";
+            try {
+                response = HTTP_CLIENT.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream());
                 code = response.statusCode();
+                try (java.io.InputStream in = response.body()) {
+                    body = CodeGenerator.readCapped(in, CodeGenerator.MAX_BODY_BYTES);
+                } catch (Exception ignored) {}
+            } catch (java.io.IOException | InterruptedException e) {
+                lastPushInfo = "ex: " + e.getMessage();
+                onSyncFailure("network", backoffMs());
+                return false;
             }
-            if (code == 403) {
-                onCodeRejected("push");
-            } else if (code < 200 || code >= 300) {
-                lastPushInfo = "HTTP " + code;
-                System.out.println("[StatusMod] Sync push status " + code);
-            } else {
-                lastPushInfo = "ok";
-                // Snapshot des uebertragenen Stands merken (nicht den aktuellen
-                // Zustand: eine Aenderung waehrend des HTTP-Calls muss beim
-                // naechsten Push als Diff/Tombstone erkannt werden).
-                lastPushedMuted.clear();
-                lastPushedMuted.addAll(pushedMuted);
-                lastPushedBlocked.clear();
-                lastPushedBlocked.addAll(pushedBlocked);
-            }
-        } catch (java.io.IOException | InterruptedException e) {
-            lastPushInfo = "ex: " + e.getMessage();
-            System.out.println("[StatusMod] Sync push exception: " + e.getMessage());
+
+            if (!handleFailure(code, body, response, "push")) return false;
+        }
+
+        // Snapshot des uebertragenen Stands merken (nicht den aktuellen Zustand:
+        // eine Aenderung waehrend des HTTP-Calls muss beim naechsten Push als
+        // Diff/Tombstone erkannt werden).
+        lastPushedMuted.clear();
+        lastPushedMuted.addAll(pushedMuted);
+        lastPushedBlocked.clear();
+        lastPushedBlocked.addAll(pushedBlocked);
+        lastPushInfo = "ok";
+        return true;
+    }
+
+    private static void addAttestHeaders(HttpRequest.Builder builder) {
+        String attest = attestHeader;
+        String sig = attestSigHeader;
+        if (attest != null && sig != null) {
+            builder.header("x-mod-attest", attest);
+            builder.header("x-mod-attest-sig", sig);
         }
     }
 
@@ -399,31 +624,31 @@ public final class SyncManager {
                 .header("x-api-key", config.apiKey)
                 .GET();
         if (!syncCode.isEmpty()) builder.header("x-sync-code", syncCode);
-        HttpRequest request = builder.build();
+        addAttestHeaders(builder);
 
         String body;
+        HttpResponse<java.io.InputStream> response;
+        int code;
         try {
-            HttpResponse<java.io.InputStream> response =
-                HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            if (response.statusCode() == 403) {
-                try { response.body().close(); } catch (Exception ignored) {}
-                if (bootstrap) lastPullInfo = "code not confirmed";
-                else onCodeRejected("pull");
-                return;
-            }
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                lastPullInfo = "HTTP " + response.statusCode();
-                try { response.body().close(); } catch (Exception ignored) {}
-                return;
-            }
+            response = HTTP_CLIENT.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream());
+            code = response.statusCode();
             try (java.io.InputStream in = response.body()) {
                 body = CodeGenerator.readCapped(in, CodeGenerator.MAX_BODY_BYTES);
             }
         } catch (java.io.IOException | InterruptedException e) {
             lastPullInfo = "ex: " + e.getMessage();
             System.out.println("[StatusMod] Sync pull exception: " + e.getMessage());
+            onSyncFailure("network", backoffMs());
             return;
         }
+
+        // Erstpaarung: solange kein Code vorliegt, ist ein 403 die normale
+        // Antwort. Nur ein Attest-Fehler ist dort schon ein Stopp-Grund.
+        if (code == 403 && bootstrap && !errorCode(body).startsWith("attest")) {
+            lastPullInfo = "code not confirmed";
+            return;
+        }
+        if (!handleFailure(code, body, response, "pull")) return;
         lastPullInfo = "ok";
 
         JsonObject json;

@@ -128,9 +128,26 @@ jobs:
             -ProguardDependencyDir $pg `
             -AsmDir "$pg\asm"
 
+      # Echtheitsnachweis: jedes Release-JAR bekommt ein signiertes Manifest
+      # (Ed25519). Muss NACH dem Obfuskieren laufen (die Hashes decken den
+      # ausgelieferten Bytecode ab) und VOR verify-jars.ps1 (das prueft die
+      # Signatur mit). Der Private Key liegt nur im GitHub-Secret.
+      - name: Setup Node (attest)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Sign release JARs (attest)
+        shell: pwsh
+        env:
+          STATUSMOD_ATTEST_KEY: ${{ secrets.STATUSMOD_ATTEST_KEY }}
+        run: |
+          if (-not $env:STATUSMOD_ATTEST_KEY) { throw "STATUSMOD_ATTEST_KEY secret is not set" }
+          node scripts/ci/sign-build.mjs --dir dist/multiversion
+
       - name: Verify JARs
         shell: pwsh
-        run: .\scripts\ci\verify-jars.ps1
+        run: .\scripts\ci\verify-jars.ps1 -RequireAttest
 
       - name: Upload JARs
         uses: actions/upload-artifact@v5
