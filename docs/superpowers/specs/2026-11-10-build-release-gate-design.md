@@ -27,8 +27,9 @@ Millisekunden ohne Netzwerkzugriff.
 2. **Nur bei klarem "unbekannt" blockieren.** Netzwerkfehler, Timeout und 5xx
    lassen den Mod starten (Fail-open). Ein Vercel-Ausfall darf nicht alle Server
    lahmlegen.
-3. **Freischaltung pro Server, nur dieser Build.** Kein globales Nachtragen, kein
-   Toggle für alle unbekannten Builds.
+3. **Freischaltung pro Server, nur dieser Build - und nur durch das
+   Projekt-Konto (Fleet-Admin).** Kein globales Nachtragen, kein Toggle für alle
+   unbekannten Builds, kein Freischalten durch Server-Owner.
 4. **Neue Mod-Version = neue ID = neue Prüfung.** Der Cache ist an die Build-ID
    gebunden. Nur Treffer aus der Registry werden gecacht; ein nur manuell
    freigegebener Build wird bei jedem Start erneut geprüft, damit ein Zurückziehen
@@ -83,11 +84,24 @@ Rebuild alte, bereits verteilte JARs grundlos sperren.
 `build_override_id` ist bewusst ein Einzelwert und keine Liste: pro Server läuft
 genau ein Build.
 
-### A.3 Migration `013_build_gate.sql`
+### A.3 Fleet-Admin (wer darf freischalten)
 
-Enthält Tabelle, Spalten (alle `if not exists`), Kommentare und das
-`enable row level security`. Anwendung über das Supabase-Tool auf
-`ujksgdbfczbgtifiovuw`, danach Verifikation der Spalten.
+`role === "owner"` reicht nicht: den Wert bekommt jeder Server-Owner aus dem
+Setup-Flow. Freischalten darf nur das Projekt-Konto, deshalb neu:
+
+`dashboard_users.is_fleet_admin boolean not null default false`
+
+- Die Migration setzt den Wert **nicht** automatisch; er wird nach dem Anwenden
+  gezielt für das Projekt-Konto gesetzt (UUID aus `dashboard_users`). Weitere
+  Admins können später per SQL ergänzt werden.
+- Helper `lib/fleet-admin.ts`: `isFleetAdmin(sb, uuid)` liest die Spalte.
+- Alle anderen Owner sehen die Build-Meldung, aber keinen Knopf.
+
+### A.4 Migration `013_build_gate.sql`
+
+Enthält Tabelle, Spalten (alle `if not exists`), `dashboard_users.is_fleet_admin`,
+Kommentare und das `enable row level security`. Anwendung über das Supabase-Tool
+auf `ujksgdbfczbgtifiovuw`, danach Verifikation der Spalten.
 
 ## Teil B - CI: Registry befüllen
 
@@ -241,29 +255,50 @@ dann ist der Server ohnehin noch nicht eingerichtet.
 - Die Route ist absichtlich öffentlich (ohne API-Key nutzbar): ein noch nicht
   gepaarter Server muss die Prüfung trotzdem durchlaufen können.
 
-### D.2 Owner-Karte "Mod-Build" (`dashboard/app/dashboard/page.tsx`)
+### D.2 Owner-Karte "Mod-Build" (`dashboard/app/dashboard/page.tsx`, nur lesend)
 
 Neue Zeile **"Start-Prüfung"**:
 
 | Zustand | Anzeige |
 |---|---|
 | `build_check_status = ok` | grün "geprüft" + Build-ID + Zeit |
-| `build_check_status = unknown` | rot: "Dieser Build steht nicht in der Registry. Der Mod startet auf diesem Server nicht." + Knopf **"Diesen Build freischalten"** |
+| `build_check_status = unknown` | rot: "Dieser Build steht nicht in der Registry. Der Mod startet auf diesem Server nicht." + Hinweis "Freischaltung nur durch den Projekt-Owner." |
 | `NULL` | neutral "noch keine Prüfung" |
 
-Ist `build_override_id` gesetzt und gleich der geprüften ID, zeigt die Karte
-"manuell freigegeben" plus **"Freigabe zurückziehen"**. Der Knopf ist nur für
-`role === "owner"` sichtbar und aktiv.
+**Kein Knopf** in diesem Dashboard - hier darf jeder Server-Owner nur lesen, was
+sein Server meldet. Ist `build_override_id` gesetzt, steht dort "manuell
+freigegeben".
 
-### D.3 Erweiterung `PUT /api/server/[server_id]/build`
+### D.3 Admin-Dashboard: freischalten (`app/admin-dashboard/page.tsx`)
+
+Neuer Abschnitt **"Server-Builds"** mit einer Zeile pro eigenem Server:
+Build-ID, Prüfstatus, Zeit, Freigabe-Status.
+
+- Status `unknown` -> Knopf **"Diesen Build freischalten"**.
+- `build_override_id` gesetzt -> Knopf **"Freigabe zurückziehen"**.
+- Beides nur sichtbar/aktiv, wenn `is_fleet_admin` true ist. Der Abschnitt bleibt
+  für normale Owner sichtbar (nur lesend), damit sie den Zustand einordnen können.
+
+Datenquelle: `GET /api/servers` wird um `build_check_status`,
+`build_check_build_id`, `build_check_at`, `build_override_id` erweitert (die Route
+ist bereits auf `owner_uuid = session.sub` gescoped).
+
+### D.4 Erweiterung `PUT /api/server/[server_id]/build`
 
 Bestehende Route, Body wird eine Union:
 
-- `{ "allow_dev_builds": boolean }` (wie heute)
-- `{ "build_override": "<build_id>" | null }` (neu: setzen / zurückziehen)
+- `{ "allow_dev_builds": boolean }` (wie heute, Server-Owner)
+- `{ "build_override": "<build_id>" | null }` (neu)
 
-Beides nur `role === "owner"` und eigene `server_id`. Zwei Audit-Einträge:
-`build_override_set`, `build_override_cleared`. Ungültige Kombination -> 400.
+Autorisierung:
+
+| Aktion | Voraussetzung |
+|---|---|
+| `allow_dev_builds` | `role === "owner"` und eigene `server_id` (unverändert) |
+| `build_override` | zusätzlich `is_fleet_admin = true`; sonst 403 `not_fleet_admin` |
+
+Zwei Audit-Einträge: `build_override_set`, `build_override_cleared`. Ungültige
+Kombination oder unbekannte Felder -> 400.
 
 ### D.4 Grenze (bewusst akzeptiert)
 
@@ -275,11 +310,12 @@ entscheiden. Deshalb gibt es keinen "keine Rückmeldung"-Zustand.
 
 | Fall | Mod | Dashboard | Lösung |
 |---|---|---|---|
-| Build nicht in `builds` | startet nicht | rot + Knopf | Build freischalten (pro Server) oder Registry-Eintrag reparieren |
-| Registry-Eintrag versehentlich gelöscht | startet nicht (nach Cache-Miss) | rot + Knopf | Freischalten oder CI-Schritt erneut laufen lassen |
+| Build nicht in `builds` | startet nicht | rot (überall), Knopf nur im Admin-Dashboard | Build freischalten (Fleet-Admin) oder Registry-Eintrag reparieren |
+| Registry-Eintrag versehentlich gelöscht | startet nicht (nach Cache-Miss) | rot | Freischalten oder CI-Schritt erneut laufen lassen |
+| Server-Owner will freischalten | startet nicht | Knopf nicht vorhanden; API 403 `not_fleet_admin` | Projekt-Owner muss freischalten |
 | Dashboard/Netz weg | startet (Warnzeile) | letzter Stand | nichts nötig |
 | Vercel-Kaltstart > 2 s | startet (Warnzeile) | letzter Stand | nichts nötig |
-| Freigabe zurückgezogen | startet beim nächsten Neustart nicht mehr | rot + Knopf | erneut freischalten oder registrierten Build installieren |
+| Freigabe zurückgezogen | startet beim nächsten Neustart nicht mehr | rot; Knopf im Admin-Dashboard | erneut freischalten oder registrierten Build installieren |
 | Dev-Build (unsigniert) | startet | Sync weiterhin über `allow_dev_builds` | unverändert |
 | Server noch nicht gepaart | startet | keine Meldung möglich | Setup abschließen |
 
@@ -290,6 +326,7 @@ Neu:
 - `dashboard/migrations/013_build_gate.sql`
 - `dashboard/app/api/builds/register/route.ts`
 - `dashboard/app/api/builds/check/route.ts`
+- `dashboard/lib/fleet-admin.ts`
 - `scripts/ci/lib/zip.mjs`
 - `scripts/ci/register-builds.mjs`
 - `common/src/main/java/com/teufel/statusmod/attest/BuildGate.java`
@@ -298,7 +335,9 @@ Geändert:
 
 - `dashboard/lib/attest.ts` (`verifyAttestStrings`, `verifyAttest` ruft sie auf)
 - `dashboard/app/api/server/[server_id]/build/route.ts` (Override-Aktionen)
-- `dashboard/app/dashboard/page.tsx` (Start-Prüfung + Knöpfe)
+- `dashboard/app/api/servers/route.ts` (Build-Felder für die Admin-Liste)
+- `dashboard/app/dashboard/page.tsx` (Start-Prüfung, nur lesend)
+- `dashboard/app/admin-dashboard/page.tsx` (Abschnitt "Server-Builds" + Knöpfe)
 - `dashboard/lib/env.ts` (`BUILD_REGISTRY_TOKEN`)
 - `.github/workflows/build.yml` (Register-Schritt)
 - `common/.../StatusMod.java` (Reihenfolge + `BuildGate`)
@@ -327,10 +366,14 @@ Auf dem Testserver (nach Deploy + registriertem Build):
    Konsolenzeile**.
 7. Zweiter Start mit blockiertem Dashboard (`dashboardUrl` auf ungültigen Host) ->
    Start in gewohnter Zeit, Cache-Treffer, keine Netzwerkabfrage.
-8. Zeile aus `builds` löschen -> Start verweigert (2 Zeilen), Karte rot, Knopf
-   freischalten -> Neustart läuft, Karte zeigt "manuell freigegeben".
+8. Zeile aus `builds` löschen -> Start verweigert (2 Zeilen), Karte rot, im
+   Admin-Dashboard freischalten -> Neustart läuft, Karte zeigt "manuell
+   freigegeben".
 9. Freigabe zurückziehen + Cache-Datei löschen -> Start wieder verweigert.
 10. Neue Version einspielen -> Cache-Miss, eine Prüfung, danach 0 ms.
+11. Rechte: `PUT .../build` mit `build_override` als normaler Owner (ohne
+    `is_fleet_admin`) -> 403 `not_fleet_admin`; als Fleet-Admin -> 200 + Audit.
+    Der Knopf fehlt im normalen Dashboard und bei Nicht-Admins im Admin-Dashboard.
 
 ## Reihenfolge der Umsetzung
 
@@ -338,7 +381,8 @@ Auf dem Testserver (nach Deploy + registriertem Build):
    `/api/builds/check`.
 2. `register-builds.mjs` + Workflow-Schritt.
 3. `BuildGate.java` + Verdrahtung + `ModInfoCommand`.
-4. Dashboard-Karte + `PUT`-Erweiterung + Audit.
+4. Dashboard: Start-Prüfung (lesend) + Admin-Abschnitt + `PUT`-Erweiterung +
+   `is_fleet_admin`-Seed + Audit.
 5. Doku (CHANGELOG, Release-Checkliste, AGENTS.md).
 6. Verifikation, Commit + Push auf `development`.
 
@@ -349,8 +393,8 @@ Auf dem Testserver (nach Deploy + registriertem Build):
 - Release-Gate: Jedes CI-JAR wird mit seiner Build-ID in der Registry
   eingetragen; der Mod prüft die ID beim Start und verweigert den Start bei
   unbekannten Builds.
-- Dashboard: Start-Prüfung in der Owner-Übersicht, inklusive manueller
-  Freischaltung pro Server.
+- Dashboard: Start-Prüfung in der Owner-Übersicht; Freischalten eines unbekannten
+  Builds ausschließlich im Admin-Dashboard (Fleet-Admin).
 
 ### Changed
 - Die Attest-Erfolgsmeldung im Serverstart entfällt; Zustand steht in `/modinfo`.
