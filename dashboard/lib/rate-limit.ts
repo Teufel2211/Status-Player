@@ -51,6 +51,11 @@ export const RATE_LIMITS = {
   BUG_IMAGE_STATUS: { windowMs: 60_000, max: 60 },
   BUG_IMAGE_UPLOAD_IP: { windowMs: 600_000, max: 20 },
   BUG_IMAGE_UPLOAD_CODE: { windowMs: 600_000, max: 12 },
+  // Start-Pruefung des Mods. Bewusst oeffentlich (ein noch nicht gepaarter
+  // Server muss ebenfalls pruefen koennen) und grosszuegig genug fuer mehrere
+  // Server hinter einer IP. Ein 429 blockiert den Mod nie (Fail-open).
+  BUILD_CHECK: { windowMs: 60_000, max: 30 },
+  BUILD_REGISTER: { windowMs: 60_000, max: 60 },
 } as const
 
 const LOGIN_LOCKOUT = {

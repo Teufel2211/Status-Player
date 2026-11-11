@@ -16,6 +16,10 @@ type BuildData = {
   attest_key_id: string | null
   attest_verified_at: string | null
   allow_dev_builds: boolean
+  build_check_status: string | null
+  build_check_build_id: string | null
+  build_check_at: string | null
+  build_override_id: string | null
 }
 
 export default function DashboardOverview() {
@@ -178,6 +182,34 @@ export default function DashboardOverview() {
                 ? `Verifiziert am ${new Date(build.attest_verified_at).toLocaleString("de-DE")} · Schlüssel ${build.attest_key_id ?? "—"}`
                 : "Noch keine Signatur geprüft."}
             </p>
+            <div className="mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+              <div className="text-sm font-medium mb-1" style={{ color: "var(--text-primary)" }}>Start-Prüfung</div>
+              {build.build_check_status === "ok" ? (
+                <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+                  <span className="badge-green">geprüft</span>{" "}
+                  {build.build_override_id && build.build_override_id === build.build_check_build_id ? (
+                    <>manuell freigegeben — </>
+                  ) : null}
+                  <span className="font-mono text-xs">{build.build_check_build_id ?? "—"}</span>
+                </p>
+              ) : build.build_check_status === "unknown" ? (
+                <p className="text-sm" style={{ color: "var(--red)" }}>
+                  Dieser Build steht nicht in der Registry. Der Mod startet auf diesem Server nicht.
+                </p>
+              ) : (
+                <p className="text-sm" style={{ color: "var(--text-muted)" }}>Noch keine Prüfung — der Server meldet sich beim nächsten Start.</p>
+              )}
+              {build.build_check_at && (
+                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                  Geprüft am {new Date(build.build_check_at).toLocaleString("de-DE")}
+                </p>
+              )}
+              {build.build_check_status === "unknown" && (
+                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                  Freischaltung nur durch den Projekt-Owner.
+                </p>
+              )}
+            </div>
             <label className="flex items-start gap-3 mt-4" style={{ cursor: role === "owner" && !savingBuild ? "pointer" : "default" }}>
               <input
                 type="checkbox"

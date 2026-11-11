@@ -25,9 +25,8 @@ import path from "node:path";
 import zlib from "node:zlib";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { ATTEST_JSON, ATTEST_SIG, collectJars, entryContent, readZip } from "./lib/zip.mjs";
 
-const ATTEST_JSON = "statusmod-attest.json";
-const ATTEST_SIG = "statusmod-attest.sig";
 const EXCLUDED_FROM_RESOURCES = new Set(["META-INF/MANIFEST.MF", ATTEST_JSON, ATTEST_SIG]);
 
 // ---------------------------------------------------------------- CRC32
@@ -46,53 +45,6 @@ function crc32(buf) {
   let c = 0xffffffff;
   for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
-}
-
-// ---------------------------------------------------------------- ZIP lesen
-
-function readZip(buf) {
-  let eocd = -1;
-  const minStart = Math.max(0, buf.length - 65557);
-  for (let i = buf.length - 22; i >= minStart; i--) {
-    if (buf.readUInt32LE(i) === 0x06054b50) {
-      eocd = i;
-      break;
-    }
-  }
-  if (eocd < 0) throw new Error("not a zip (no EOCD)");
-
-  const count = buf.readUInt16LE(eocd + 10);
-  const cdOffset = buf.readUInt32LE(eocd + 16);
-  if (count === 0xffff || cdOffset === 0xffffffff) throw new Error("zip64 not supported");
-
-  const entries = [];
-  let p = cdOffset;
-  for (let i = 0; i < count; i++) {
-    if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error("bad central directory at " + p);
-    const flags = buf.readUInt16LE(p + 8);
-    const method = buf.readUInt16LE(p + 10);
-    const time = buf.readUInt16LE(p + 12);
-    const date = buf.readUInt16LE(p + 14);
-    const crc = buf.readUInt32LE(p + 16);
-    const compSize = buf.readUInt32LE(p + 20);
-    const uncompSize = buf.readUInt32LE(p + 24);
-    const nameLen = buf.readUInt16LE(p + 28);
-    const extraLen = buf.readUInt16LE(p + 30);
-    const commentLen = buf.readUInt16LE(p + 32);
-    const localOff = buf.readUInt32LE(p + 42);
-    const name = buf.toString("utf8", p + 46, p + 46 + nameLen);
-
-    if (localOff === 0xffffffff) throw new Error("zip64 not supported: " + name);
-    if (buf.readUInt32LE(localOff) !== 0x04034b50) throw new Error("bad local header: " + name);
-    const localNameLen = buf.readUInt16LE(localOff + 26);
-    const localExtraLen = buf.readUInt16LE(localOff + 28);
-    const dataStart = localOff + 30 + localNameLen + localExtraLen;
-    const data = buf.subarray(dataStart, dataStart + compSize);
-
-    entries.push({ name, flags, method, time, date, crc, compSize, uncompSize, data });
-    p += 46 + nameLen + extraLen + commentLen;
-  }
-  return entries;
 }
 
 // ---------------------------------------------------------------- ZIP schreiben
@@ -174,12 +126,6 @@ function writeZip(entries, outPath) {
 }
 
 // ---------------------------------------------------------------- Hashes
-
-function entryContent(entry) {
-  if (entry.method === 0) return entry.data;
-  if (entry.method === 8) return zlib.inflateRawSync(entry.data);
-  throw new Error(`unsupported compression method ${entry.method} for ${entry.name}`);
-}
 
 function sha256(buf) {
   return crypto.createHash("sha256").update(buf).digest("hex");
@@ -325,16 +271,6 @@ function parseArgs(argv) {
     else throw new Error(`unknown argument: ${a}`);
   }
   return args;
-}
-
-function collectJars(dir) {
-  const out = [];
-  for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, item.name);
-    if (item.isDirectory()) out.push(...collectJars(p));
-    else if (item.isFile() && /^Statusmod-.+\.jar$/i.test(item.name)) out.push(p);
-  }
-  return out;
 }
 
 function main() {

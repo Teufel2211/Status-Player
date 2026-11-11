@@ -17,6 +17,11 @@ type FleetServer = {
   known: number | null
   online: number | null
   mod_enabled: boolean
+  owned?: boolean
+  build_check_status?: string | null
+  build_check_build_id?: string | null
+  build_check_at?: string | null
+  build_override_id?: string | null
 }
 
 type ApiKeyRow = {
@@ -73,6 +78,8 @@ export default function AdminOverviewPage() {
   const [globalModEnabled, setGlobalModEnabled] = useState(true)
   const [bulkModBusy, setBulkModBusy] = useState(false)
   const [modBusyId, setModBusyId] = useState<string | null>(null)
+  const [fleetAdmin, setFleetAdmin] = useState(false)
+  const [buildBusyId, setBuildBusyId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -93,9 +100,11 @@ export default function AdminOverviewPage() {
             // Alte API-Form (vor dem Kill-Switch): alles aktiv.
             setServers(d)
             setGlobalModEnabled(true)
+            setFleetAdmin(false)
           } else {
             setServers(Array.isArray(d?.servers) ? d.servers : [])
             setGlobalModEnabled(d?.global_mod_enabled !== false)
+            setFleetAdmin(d?.is_fleet_admin === true)
           }
         })
         .catch(() => {})
@@ -184,6 +193,63 @@ export default function AdminOverviewPage() {
       const r = await apiFetch(`/api/presets/${sid}/${encodeURIComponent(name)}`, { method: "DELETE" })
       if (r.ok) await load()
     } catch {}
+  }
+
+  async function unlockBuild(s: FleetServer) {
+    const buildId = s.build_check_build_id
+    if (!buildId) return
+    if (
+      !window.confirm(
+        `Build ${buildId} für Server ${s.id.slice(0, 8)} freischalten?\n\nDer Mod startet damit wieder — die Freischaltung gilt nur für diesen Build auf diesem Server.`
+      )
+    ) {
+      return
+    }
+    setBuildBusyId(s.id)
+    try {
+      const r = await apiFetch(`/api/server/${s.id}/build`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ build_override: buildId }),
+      })
+      if (r.ok) {
+        await load()
+      } else {
+        const d = await r.json().catch(() => null)
+        window.alert(d?.error ?? "Freischalten fehlgeschlagen.")
+      }
+    } catch {
+      window.alert("Netzwerkfehler.")
+    }
+    setBuildBusyId(null)
+  }
+
+  async function withdrawOverride(s: FleetServer) {
+    if (!s.build_override_id) return
+    if (
+      !window.confirm(
+        `Freischaltung für Server ${s.id.slice(0, 8)} zurückziehen?\n\nDer freigeschaltete Build startet nach dem nächsten Neustart nicht mehr.`
+      )
+    ) {
+      return
+    }
+    setBuildBusyId(s.id)
+    try {
+      const r = await apiFetch(`/api/server/${s.id}/build`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ build_override: null }),
+      })
+      if (r.ok) {
+        await load()
+      } else {
+        const d = await r.json().catch(() => null)
+        window.alert(d?.error ?? "Zurückziehen fehlgeschlagen.")
+      }
+    } catch {
+      window.alert("Netzwerkfehler.")
+    }
+    setBuildBusyId(null)
   }
 
   async function toggleGlobalMod() {
@@ -491,6 +557,81 @@ export default function AdminOverviewPage() {
           </>
         )}
       </div>
+
+      {servers.length > 0 && (
+        <div className="mb-8">
+          <SectionHead
+            kicker="Release-Gate"
+            title="Server-Builds"
+            sub="Start-Prüfung der Mods beim Serverstart — unbekannte Builds laufen nicht an."
+          />
+          <div className="card">
+            <div className="space-y-2">
+              {servers.map((s) => {
+                const checked = s.build_check_status === "ok"
+                const unknown = s.build_check_status === "unknown"
+                const override = s.build_override_id
+                const canUnlock = fleetAdmin && unknown && !!s.build_check_build_id && override !== s.build_check_build_id
+                const canWithdraw = fleetAdmin && !!override
+                return (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2 flex-wrap"
+                    style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-primary)" }}
+                  >
+                    <span className="font-mono text-xs" style={{ color: "var(--text-primary)" }}>{s.id.slice(0, 8)}</span>
+                    {s.owned && <span className="badge-neutral text-[10px]">eigener Server</span>}
+                    <span className="font-mono text-[11px] flex-1 min-w-[140px] truncate" style={{ color: "var(--text-secondary)" }}>
+                      {s.build_check_build_id ?? "—"}
+                    </span>
+                    {checked && <span className="badge-green text-[10px]">Geprüft</span>}
+                    {unknown && <span className="badge-red text-[10px]">Unbekannter Build</span>}
+                    {!checked && !unknown && <span className="badge-neutral text-[10px]">Noch nicht geprüft</span>}
+                    {override && <span className="badge-yellow text-[10px]">manuell freigeschaltet</span>}
+                    <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>
+                      {s.build_check_at ? new Date(s.build_check_at).toLocaleString() : ""}
+                    </span>
+                    {fleetAdmin && (canUnlock || canWithdraw) && (
+                      <span className="flex items-center gap-3">
+                        {canUnlock && (
+                          <button
+                            onClick={() => unlockBuild(s)}
+                            disabled={buildBusyId !== null}
+                            className="text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
+                            style={{ color: "var(--accent-text)" }}
+                          >
+                            {buildBusyId === s.id ? "Schaltet frei…" : "Freischalten"}
+                          </button>
+                        )}
+                        {canWithdraw && (
+                          <button
+                            onClick={() => withdrawOverride(s)}
+                            disabled={buildBusyId !== null}
+                            className="text-xs transition-opacity hover:opacity-80 disabled:opacity-40"
+                            style={{ color: "var(--red)" }}
+                          >
+                            {buildBusyId === s.id ? "Zieht zurück…" : "Zurückziehen"}
+                          </button>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {!fleetAdmin && (
+              <p className="text-xs mt-3" style={{ color: "var(--text-muted)" }}>
+                Unbekannte Builds schaltet ausschließlich der Projekt-Owner frei.
+              </p>
+            )}
+            {fleetAdmin && (
+              <p className="text-xs mt-3" style={{ color: "var(--text-muted)" }}>
+                Freischaltung gilt pro Server und nur für den geprüften Build. Zurückziehen greift beim nächsten Neustart des Servers.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mb-8">
         <SectionHead kicker="Verwaltung" title="Presets & Verteilung" sub="Schnellauswahl für deinen Server und Verbindungsdaten für alle Server." />

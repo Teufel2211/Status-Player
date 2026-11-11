@@ -1,6 +1,6 @@
 # Design-Spezifikation: Release-Gate (Build-ID-Registry)
 
-Stand: 2026-11-10
+Stand: 2026-11-10 (2026-11-11 an die Umsetzung angeglichen)
 Status: freigegeben (Entwurf vom Nutzer bestätigt)
 
 ## Ziel
@@ -174,7 +174,7 @@ Zustände: `ALLOW` (Cache-Treffer), `ALLOW_REGISTERED` (200, registriert),
 |---|---|---|
 | kein verifiziertes Attest (Dev-Build) | SKIP | startet wie heute, still |
 | kein Dedicated Server | SKIP | startet, still |
-| `serverId` oder `apiKey` leer | SKIP | startet, still |
+| `dashboardUrl`, `serverId` oder `apiKey` leer | SKIP | startet, still |
 | Cache-Datei enthält aktuelle Build-ID | ALLOW | startet, **0 ms, still** |
 | HTTP 200 `status=ok` | ALLOW_REGISTERED | startet, still, **Cache schreiben** |
 | HTTP 200 `status=override` | ALLOW_OVERRIDE | startet, still, **kein Cache** |
@@ -183,7 +183,8 @@ Zustände: `ALLOW` (Cache-Treffer), `ALLOW_REGISTERED` (200, registriert),
 
 ### C.3 Cache
 
-- Datei: `config/statusmodfleet/build-gate.txt` (neben `config.json`).
+- Datei: `config/statusmod/build-gate.txt` (Konfigurationsverzeichnis des Mods;
+  `config/statusmodfleet/` gehört zum Fleet-Mod und bleibt unberührt).
 - Inhalt: die Build-ID als eine Zeile. Schreiben atomar (Temp-Datei + Move, wie
   `ModConfig.save()`), Lesen mit Größendeckel (256 Zeichen).
 - Nur `ALLOW_REGISTERED` schreibt den Cache. `ALLOW_OVERRIDE`, `DENY` und `OPEN`
@@ -250,7 +251,7 @@ dann ist der Server ohnehin noch nicht eingerichtet.
   bei `build_unknown` gäbe es keine Dashboard-Meldung. Bei `attest_required` /
   `attest_invalid` wird nichts geschrieben (das ist ein Attest-Fehler, kein
   Registry-Befund), und auch sonst keine anderen Spalten angefasst.
-- Rate-Limit pro IP (10/min), damit die öffentliche Route nicht als Orakel dient.
+- Rate-Limit pro IP (30/min), damit die öffentliche Route nicht als Orakel dient.
   Ein 429 darf den Mod nie blockieren (siehe C.2).
 - Die Route ist absichtlich öffentlich (ohne API-Key nutzbar): ein noch nicht
   gepaarter Server muss die Prüfung trotzdem durchlaufen können.
@@ -271,17 +272,18 @@ freigegeben".
 
 ### D.3 Admin-Dashboard: freischalten (`app/admin-dashboard/page.tsx`)
 
-Neuer Abschnitt **"Server-Builds"** mit einer Zeile pro eigenem Server:
+Neuer Abschnitt **"Server-Builds"** mit einer Zeile pro Server:
 Build-ID, Prüfstatus, Zeit, Freigabe-Status.
 
-- Status `unknown` -> Knopf **"Diesen Build freischalten"**.
-- `build_override_id` gesetzt -> Knopf **"Freigabe zurückziehen"**.
+- Der Fleet-Admin sieht **alle** Server der Instanz (mit "eigener Server"-Markierung),
+  nicht nur seine eigenen - sonst könnte er fremde Server nie freischalten.
+  `GET /api/servers` liefert für Fleet-Admins deshalb die volle Liste plus
+  `is_fleet_admin`; normale Owner sehen wie bisher nur ihre eigenen.
+- Status `unknown` -> Knopf **"Freischalten"** (genau diesen Build).
+- `build_override_id` gesetzt -> Knopf **"Zurückziehen"**.
 - Beides nur sichtbar/aktiv, wenn `is_fleet_admin` true ist. Der Abschnitt bleibt
   für normale Owner sichtbar (nur lesend), damit sie den Zustand einordnen können.
-
-Datenquelle: `GET /api/servers` wird um `build_check_status`,
-`build_check_build_id`, `build_check_at`, `build_override_id` erweitert (die Route
-ist bereits auf `owner_uuid = session.sub` gescoped).
+- `/api/me` liefert zusätzlich `is_fleet_admin` (Auswahl im Admin-Frontend).
 
 ### D.4 Erweiterung `PUT /api/server/[server_id]/build`
 
@@ -295,7 +297,7 @@ Autorisierung:
 | Aktion | Voraussetzung |
 |---|---|
 | `allow_dev_builds` | `role === "owner"` und eigene `server_id` (unverändert) |
-| `build_override` | zusätzlich `is_fleet_admin = true`; sonst 403 `not_fleet_admin` |
+| `build_override` | zusätzlich `is_fleet_admin = true`; gilt auf **jedem** Server (nicht nur dem eigenen), sonst 403 `not_fleet_admin` |
 
 Zwei Audit-Einträge: `build_override_set`, `build_override_cleared`. Ungültige
 Kombination oder unbekannte Felder -> 400.

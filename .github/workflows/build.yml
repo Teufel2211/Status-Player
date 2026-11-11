@@ -149,6 +149,18 @@ jobs:
         shell: pwsh
         run: .\scripts\ci\verify-jars.ps1 -RequireAttest
 
+      # Release-Gate: jedes signierte JAR muss in der Registry stehen, bevor es
+      # hochgeladen/veroeffentlicht wird. Scheitert der Schritt, bricht der Job
+      # ab - ein Build, dessen ID der Mod beim Start nicht findet, wird so nie
+      # veroeffentlicht. Idempotent: ein erneuter Lauf ueberschreibt die Zeile.
+      - name: Register builds (Supabase)
+        shell: pwsh
+        env:
+          STATUSMOD_BUILD_TOKEN: ${{ secrets.STATUSMOD_BUILD_TOKEN }}
+        run: |
+          if (-not $env:STATUSMOD_BUILD_TOKEN) { throw "STATUSMOD_BUILD_TOKEN secret is not set" }
+          node scripts/ci/register-builds.mjs --dir dist/multiversion
+
       - name: Upload JARs
         uses: actions/upload-artifact@v5
         with:

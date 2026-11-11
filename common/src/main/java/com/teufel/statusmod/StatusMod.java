@@ -9,6 +9,7 @@ import com.teufel.statusmod.storage.ServerPresets;
 import com.teufel.statusmod.storage.SettingsStorage;
 import com.teufel.statusmod.storage.SlowmodeStore;
 import com.teufel.statusmod.storage.WarningStore;
+import com.teufel.statusmod.attest.BuildGate;
 import com.teufel.statusmod.platform.Platform;
 import com.teufel.statusmod.platform.PlatformServices;
 import com.teufel.statusmod.setup.SetupManager;
@@ -47,6 +48,8 @@ public final class StatusMod {
     private static volatile boolean refused = false;
     /** Ergebnis der Attest-Pruefung; null solange init() nicht lief. */
     public static volatile com.teufel.statusmod.attest.AttestResult attestation;
+    /** Ergebnis der Build-Gate-Pruefung (Release-Gate); null solange init() nicht lief. */
+    public static volatile BuildGate.Outcome buildGate;
     /** Vom Dashboard gesteuerter Kill-Switch (siehe SyncManager.pull). */
     private static volatile boolean remoteDisabled = false;
     /** "global" oder "server": bestimmt die Chat-Meldung beim Join. */
@@ -88,12 +91,23 @@ public final class StatusMod {
             return;
         }
         attestation = attest;
-        System.out.println("[StatusMod] Attest: " + attest.describe());
 
         Platform platform = PlatformServices.getPlatform();
         config = ModConfig.load();
         remoteDisabled = config.remoteDisabled;
         remoteDisabledScope = "global".equalsIgnoreCase(config.remoteDisabledScope) ? "global" : "server";
+
+        // Release-Gate: die eigene Build-ID muss in der Registry stehen. Nur ein
+        // klares "build_unknown" blockiert - Netzwerkprobleme starten den Mod.
+        // Vor jeder Registrierung, damit "startet nicht" wortlich gilt.
+        BuildGate.Outcome gate = BuildGate.check(config, platform);
+        buildGate = gate;
+        BuildGate.report(gate);
+        if (gate.isDenied()) {
+            refused = true;
+            return;
+        }
+
         storage = new SettingsStorage();
         blockedPlayers = new BlockedPlayers();
         mutedPlayers = new MutedPlayers();

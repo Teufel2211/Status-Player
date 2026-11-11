@@ -82,18 +82,33 @@ unverändert, das Flag bleibt also auch nach dem Stempeln `0x0000`.
 - [ ] Migration `012_attest.sql` angewendet (Tabelle `attest_keys` mit Key `2026-11`, 4 Spalten auf `public.servers`) – erledigt 2026-11-07
 - [x] GitHub-Secret `STATUSMOD_ATTEST_KEY` gesetzt (Private Key, Base64) – Public Key in `scripts/ci/attest-keys.json` + `AttestKeys.java`
 - [x] Sign-Schritt in CI (`sign-build.mjs --dir dist/multiversion`) läuft **nach** A4 und **vor** Verify; `verify-jars.ps1 -RequireAttest` prüft beide Attest-Entries
-- [ ] Signiertes Release-JAR: Start loggt `[StatusMod] Attest: verified (key 2026-11)`; Dashboard zeigt Build-ID + „verifiziert am"
+- [ ] Signiertes Release-JAR: Start **ohne** Attest-Erfolgszeile (seit dem Release-Gate stumm), `/modinfo` zeigt „Build-Attest: verified (key 2026-11)"; Dashboard zeigt Build-ID + „verifiziert am"
 - [ ] Manipuliertes JAR (ein Byte in einer Klasse geändert): Start bricht ab, `[StatusMod] This build failed integrity verification. Refusing to start.`
 - [ ] Unsigned Dev-JAR: Sync liefert `403 attest_required`, Mod pausiert 15 min und repariert **nicht**; Owner-Toggle „Dev-Builds erlauben" lässt den Sync zu
 - [ ] Falsche Signatur / unbekannter `key_id`: `403 attest_invalid`, es wird nichts geschrieben
 - [ ] Dashboard-Ausfall: Testserver ändert Status, Dashboard kurz nicht erreichbar → nach Rückkehr ist die Änderung da (Backoff 30→300 s, kein Config-Cache)
 - [ ] Server mit >200 Spielern: Push läuft in Chunks, Tombstones nur im ersten Chunk, `lastPushed*` erst nach dem letzten Chunk
 
+### 3d. Release-Gate (Build-ID-Registry, 1.4.2 neu)
+
+- [x] Migration `013_build_gate.sql` angewendet (Tabelle `builds`, 4 `build_check_*`/`build_override_id`-Spalten auf `servers`, `dashboard_users.is_fleet_admin`) – erledigt 2026-11-11, Supabase-Registry `build_gate` / `20261111140853`
+- [x] `is_fleet_admin` für das Projekt-Konto gesetzt (UUID-Präfix `7f6cda92`)
+- [x] `register-builds.mjs` gegen Stub-Server getestet: Payload (kanonisches Attest-JSON, Sig 64 B, Bearer), Retry 2 s/6 s, Exit 1 bei Dauerfehler (15/15 Checks, 2026-11-11)
+- [x] Check-Route E2E gegen lokalen Dashboard-Server + echte Supabase (Temp-Key `test-2026-11`): registriert → 200 `ok`, unregistriert → 403 `build_unknown`, ohne Header → `attest_required`, Müll/manipulierte Sig/verändertes Attest → `attest_invalid` (8/8 Checks, 2026-11-11; Temp-Key und Test-Zeilen danach entfernt)
+- [ ] GitHub-Secret `STATUSMOD_BUILD_TOKEN` + Vercel-Env `BUILD_REGISTRY_TOKEN` (identischer Wert) gesetzt — **brauchst du**
+- [ ] CI-Lauf: Register-Schritt zwischen Verify und Upload loggt `[registry] 24/24 JARs registered`
+- [ ] Erster Start eines signierten Builds: **keine** neue Konsolenzeile, `/modinfo` zeigt „Build-Gate: registered (cached)"; Cache-Datei `config/statusmod/build-gate.txt` existiert
+- [ ] Zweiter Start mit blockiertem Dashboard: Start in gewohnter Zeit (Cache-Treffer, keine Netzwerkabfrage)
+- [ ] Registry-Zeile löschen + Cache-Datei löschen: Start verweigert (2 Zeilen), Dashboard-Karte rot
+- [ ] Im Admin-Dashboard freischalten → Neustart läuft; Freigabe zurückziehen + Cache löschen → Start wieder verweigert
+- [ ] Rechte: `PUT .../build` mit `build_override` als normaler Owner → 403 `not_fleet_admin`; Fleet-Admin-Knopf nur im Admin-Dashboard
+
 ## 4. Tokens & Secrets
 
 - [ ] `.\scripts\ci\check-release-tokens.ps1` → Exit 0 (inkl. Modrinth-Auth via GET /user). ACHTUNG: `$env:`-Tokens gelten nur pro PowerShell-Sitzung — vor Publish neu setzen + Check erneut laufen lassen!
   - **Blockiert (2026-10-27):** `MODRINTH_TOKEN` = HTTP 401, `CURSEFORGE_API_KEY` = HTTP 403
-- [ ] CI-Secrets prüfen (GitHub → Settings → Secrets → Actions): `MODRINTH_TOKEN`, `MODRINTH_PROJECT_ID`, `CURSEFORGE_TOKEN`, `CURSEFORGE_PROJECT_ID`, `STATUSMOD_ATTEST_KEY` - **brauchst du**
+- [ ] CI-Secrets prüfen (GitHub → Settings → Secrets → Actions): `MODRINTH_TOKEN`, `MODRINTH_PROJECT_ID`, `CURSEFORGE_TOKEN`, `CURSEFORGE_PROJECT_ID`, `STATUSMOD_ATTEST_KEY`, `STATUSMOD_BUILD_TOKEN` (neu 1.4.2, für `register-builds.mjs`) - **brauchst du**
+- [ ] Vercel-Env (Production): `BUILD_REGISTRY_TOKEN` = derselbe Wert wie `STATUSMOD_BUILD_TOKEN` — **brauchst du** (ohne ihn antwortet `/api/builds/register` 503 und CI bricht ab)
 - [x] Keine *neuen* Secrets im Diff
 
 ## 5. Dashboard live
@@ -101,9 +116,12 @@ unverändert, das Flag bleibt also auch nach dem Stempeln `0x0000`.
 - [ ] `vercel deploy --prod` — **zwingend vor dem Mod-Rollout** (das neue Dashboard stellt den Sync-Code ohne Code-Anfrage aus; der alte Stand antwortet sonst `403`)
 - [x] `/api/health` → `healthy`, `database: connected`, `previous_secret_active: false`
 - [x] Migration `011_server_sync_codes` angewendet (6 Spalten auf `public.servers`, Bestandszeilen unverändert)
+- [x] Migration `013_build_gate` angewendet (Tabelle `builds` + `build_check_*`-Spalten, 2026-11-11)
 - [ ] Login + Owner-Login einmal durchspielen — **brauchst du**
 - [ ] Config-Pull auf Testserver prüfen — **brauchst du**
 - [ ] Sync ohne Eingriff prüfen: Testserver mit neuem JAR synct ohne Code-Befehl, Dashboard zeigt Spieler — **brauchst du**
+
+**Deploy-Reihenfolge Release-Gate (wichtig):** Erst `BUILD_REGISTRY_TOKEN` in Vercel setzen, dann Dashboard deployen, **dann** erst mergen/publishen — die CI-Registrierung läuft gegen das Prod-Dashboard. Ein Deploy mit leerer `builds`-Tabelle ist unproblematisch, solange keine signierten JARs im Umlauf sind (alle 1.4.1/Dev-Builds sind unsigniert → BuildGate SKIPpt). Signierte Builds dürfen erst **nach** der CI-Registrierung auf Server kommen.
 
 ## 6. Offenlegung (Modrinth, vor Upload!)
 

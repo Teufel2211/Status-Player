@@ -75,9 +75,23 @@ function decodeBase64(value: string): Buffer {
 }
 
 export async function verifyAttest(sb: any, request: Request): Promise<AttestOutcome> {
-  const rawAttest = request.headers.get(ATTEST_HEADER)
-  const rawSig = request.headers.get(ATTEST_SIG_HEADER)
+  return verifyAttestStrings(
+    sb,
+    request.headers.get(ATTEST_HEADER),
+    request.headers.get(ATTEST_SIG_HEADER)
+  )
+}
 
+/**
+ * Dieselbe Pruefung wie verifyAttest, aber mit den rohen Header-Werten statt
+ * eines Requests. Wird von Routen gebraucht, die das Attest als JSON-Body
+ * bekommen (CI-Registrierung) statt als HTTP-Header.
+ */
+export async function verifyAttestStrings(
+  sb: any,
+  rawAttest: string | null,
+  rawSig: string | null
+): Promise<AttestOutcome> {
   if (!rawAttest && !rawSig) return { status: "missing" }
   if (!rawAttest || !rawSig) return { status: "invalid", reason: "incomplete attest headers" }
   if (rawAttest.length > MAX_ATTEST_CHARS) return { status: "invalid", reason: "attest header too large" }

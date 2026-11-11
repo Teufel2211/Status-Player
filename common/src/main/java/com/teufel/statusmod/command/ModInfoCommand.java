@@ -23,13 +23,17 @@ public class ModInfoCommand {
                         CommandUtil.sendSuccess(src, Component.literal("Status Player — Informationen"), false);
                         CommandUtil.sendSuccess(src, Component.literal("Status: "
                             + (StatusMod.isRefused()
-                                ? "deaktiviert — dieses Build wurde verändert, umbenannt oder nicht verifiziert. Bitte das Original von der Projektseite installieren."
+                                ? "deaktiviert — dieses Build wurde verändert, umbenannt oder ist nicht verifiziert bzw. nicht registriert. Bitte das Original von der Projektseite installieren."
                                 : StatusMod.isRemoteDisabled()
                                     ? "vom Admin-Dashboard deaktiviert"
                                     : "aktiv")), false);
                         if (StatusMod.attestation != null) {
                             CommandUtil.sendSuccess(src, Component.literal("Build-Attest: "
                                 + StatusMod.attestation.describe()), false);
+                        }
+                        if (StatusMod.buildGate != null) {
+                            CommandUtil.sendSuccess(src, Component.literal("Build-Gate: "
+                                + StatusMod.buildGate.describe()), false);
                         }
                         CommandUtil.sendSuccess(src, Component.literal("Website: " + WEBSITE), false);
                         CommandUtil.sendSuccess(src, Component.literal("Issues: " + ISSUES), false);

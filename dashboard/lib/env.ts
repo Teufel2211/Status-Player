@@ -11,6 +11,10 @@ const envSchema = z.object({
   }),
   DISCORD_WEBHOOK_SECRET: z.string().optional().default(""),
   MOD_SETUP_SECRET: z.string().optional().default(""),
+  // Token fuer die CI, die fertige Builds in der Registry eintraegt
+  // (POST /api/builds/register). Optional, damit ein Deployment ohne den
+  // Schritt nicht bricht - die Route antwortet dann mit 503.
+  BUILD_REGISTRY_TOKEN: z.string().optional().default(""),
   ALLOW_HTTP: z.string().optional().default("false"),
 })
 

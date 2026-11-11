@@ -18,6 +18,7 @@ Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improve
 - Admin kill switch: disable StatusMod per server or globally from the admin dashboard. While disabled, status display, AFK, moderation, commands and sync push are off; the mod keeps polling, so re-enabling applies within 15 seconds without a restart. `/modinfo` still reports the state.
 - Server sync recovers on its own: after a network error or a dashboard outage the mod reconnects with backoff and pushes every change made in the meantime. Nothing is lost and no restart is needed.
 - Signed release builds: every release JAR carries a signed build manifest (Ed25519). The mod refuses to start when the manifest no longer matches its own content, and the dashboard only accepts sync from verified builds. The dashboard overview shows the running build and, for test servers, a "Dev-Builds erlauben" switch.
+- Release gate: before publishing, CI registers every JAR by build ID in the dashboard registry. On start the mod checks that registry and refuses to run unknown builds (only `/modinfo` stays available). The first start of a new build does a single check (~150–500 ms, hard cap 2 s); afterwards a local cache decides instantly without network. If the dashboard is unreachable, the mod starts anyway. Unknown builds show up red in the dashboard; only the project owner can unlock exactly one build for exactly one server (per server, never global).
 
 ### Changed
 
@@ -26,6 +27,7 @@ Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improve
 - Display name: the mod now appears as **Status Player** in the mod list instead of **Status Mod**.
 - Kill switch chat notice: when StatusMod is disabled, players see why (per-server owner notice or global Discord pointer) on join and immediately when the switch changes.
 - License: from 1.4.2 on, Status Player is released under the **Status Player License 1.0** instead of MIT. Running it on your own servers (including monetized ones) and modifying it for private use stay allowed; rebranding it or publishing a modified version as your own mod does not. A continuation may be published if the project has had no release for twelve months. Versions up to and including 1.4.1 remain MIT.
+- Server start no longer prints the attest success line; the build gate state is visible in `/modinfo` instead. Unlocking unknown builds is done in the admin dashboard, not in the per-server owner dashboard.
 
 ### Improved
 
