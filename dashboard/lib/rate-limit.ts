@@ -48,6 +48,9 @@ export const RATE_LIMITS = {
   CODE_GENERATION: { windowMs: 60_000, max: 3 },
   TOTP_VERIFY: { windowMs: 60_000, max: 5 },
   BUG_REPORT: { windowMs: 600_000, max: 3 },
+  // /bug: Server-Bucket VOR dem Argon2id-Key-Verify (CPU-DoS-Schutz wie SYNC)
+  // und deckt damit auch das Rotieren der Spieler-UUID im BUG_REPORT-Bucket ab.
+  BUG_REPORT_SERVER: { windowMs: 60_000, max: 30 },
   BUG_IMAGE_STATUS: { windowMs: 60_000, max: 60 },
   BUG_IMAGE_UPLOAD_IP: { windowMs: 600_000, max: 20 },
   BUG_IMAGE_UPLOAD_CODE: { windowMs: 600_000, max: 12 },

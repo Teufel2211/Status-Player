@@ -31,6 +31,13 @@ export async function POST(request: Request) {
   if (!parsed.success) return badRequest()
 
   const report = parsed.data
+
+  // Rate-Limit vor dem Argon2id-Key-Verify: ein Fluten mit beliebigen
+  // x-api-key-Headern waere sonst CPU-DoS (verify iteriert alle Keys).
+  // Server-Bucket statt Spieler-Bucket: die Spieler-UUID ist frei waehlbar.
+  const serverRate = checkRateLimit(`bugreport-post:${report.server_id}`, RATE_LIMITS.BUG_REPORT_SERVER)
+  if (!serverRate.allowed) return tooMany("Zu viele Bug-Meldungen. Bitte warte einige Minuten.")
+
   if (!(await requireApiKey(request, "check", report.server_id))) return unauthorized()
 
   const rate = checkRateLimit(`bugreport:${report.server_id}:${report.uuid}`, RATE_LIMITS.BUG_REPORT)
