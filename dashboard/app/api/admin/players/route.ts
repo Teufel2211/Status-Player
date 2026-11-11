@@ -1,14 +1,13 @@
 import { ok, serverError, unauthorized, forbidden } from "@/lib/response"
 import { getServiceClient } from "@/lib/supabase"
-import { requireSession } from "@/lib/auth"
+import { requireFleetAdmin } from "@/lib/fleet-admin"
 
 export const dynamic = "force-dynamic"
 
-// Alle Spieler aller Server — nur für den Owner (Admin-Dashboard).
+// Alle Spieler aller Server — nur das Projekt-Konto (Admin-Dashboard).
 export async function GET(request: Request) {
-  const session = requireSession(request)
-  if (!session) return unauthorized()
-  if (session.role !== "owner") return forbidden("Nur der Owner sieht alle Spieler")
+  const gate = await requireFleetAdmin(request)
+  if (!gate.ok) return gate.status === 401 ? unauthorized() : forbidden("Nur der Projekt-Admin sieht alle Spieler")
 
   const sb = getServiceClient()
   const { data, error } = await (sb as any)

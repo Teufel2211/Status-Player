@@ -143,7 +143,7 @@ export default function AdminBugsPage() {
           <div>
             <div className="kicker mb-2">Admin-Dashboard · {counts.open} offen · {counts.all} gesamt</div>
             <h1 className="font-display font-bold text-3xl" style={{ color: "var(--text-primary)" }}>Bug-Meldungen</h1>
-            <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>Meldungen aus dem /bug-Befehl — nur für den Owner sichtbar.</p>
+            <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>Meldungen aus dem /bug-Befehl — nur für den Projekt-Admin sichtbar.</p>
           </div>
           <button
             onClick={load}

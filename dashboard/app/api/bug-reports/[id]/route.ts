@@ -1,6 +1,6 @@
 import { badRequest, forbidden, notFound, ok, serverError, unauthorized } from "@/lib/response"
 import { getServiceClient } from "@/lib/supabase"
-import { requireSession } from "@/lib/auth"
+import { requireFleetAdmin } from "@/lib/fleet-admin"
 import { BugReportUpdateSchema } from "@/lib/validators"
 
 export const dynamic = "force-dynamic"
@@ -11,7 +11,7 @@ function parseId(raw: string): number | null {
   return Number.isInteger(id) && id > 0 ? id : null
 }
 
-// Bearbeiten/Löschen einer Meldung — nur der Owner (Admin-Dashboard).
+// Bearbeiten/Löschen einer Meldung — nur das Projekt-Konto (Admin-Dashboard).
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
@@ -19,9 +19,8 @@ export async function PATCH(
   const id = parseId(params.id)
   if (id === null) return badRequest()
 
-  const session = requireSession(request)
-  if (!session) return unauthorized()
-  if (session.role !== "owner") return forbidden("Nur der Owner kann Meldungen bearbeiten")
+  const gate = await requireFleetAdmin(request)
+  if (!gate.ok) return gate.status === 401 ? unauthorized() : forbidden("Nur der Projekt-Admin kann Meldungen bearbeiten")
 
   let body: unknown
   try { body = await request.json() } catch { return badRequest() }
@@ -51,9 +50,8 @@ export async function DELETE(
   const id = parseId(params.id)
   if (id === null) return badRequest()
 
-  const session = requireSession(request)
-  if (!session) return unauthorized()
-  if (session.role !== "owner") return forbidden("Nur der Owner kann Meldungen löschen")
+  const gate = await requireFleetAdmin(request)
+  if (!gate.ok) return gate.status === 401 ? unauthorized() : forbidden("Nur der Projekt-Admin kann Meldungen löschen")
 
   const sb = getServiceClient()
 

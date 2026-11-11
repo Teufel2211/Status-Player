@@ -9,7 +9,7 @@ import { apiFetch, ensureSession } from "@/lib/client/auth"
 export default function AdminDashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [authed, setAuthed] = useState(false)
-  const [owner, setOwner] = useState<boolean | null>(null)
+  const [fleetAdmin, setFleetAdmin] = useState<boolean | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -19,8 +19,8 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
         setAuthed(true)
         apiFetch("/api/me")
           .then((r) => (r.ok ? r.json() : null))
-          .then((d) => { if (!cancelled) setOwner(d?.role === "owner") })
-          .catch(() => { if (!cancelled) setOwner(false) })
+          .then((d) => { if (!cancelled) setFleetAdmin(d?.is_fleet_admin === true) })
+          .catch(() => { if (!cancelled) setFleetAdmin(false) })
       } else {
         router.push("/login")
       }
@@ -30,7 +30,7 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
     }
   }, [router])
 
-  if (!authed || owner === null) {
+  if (!authed || fleetAdmin === null) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "var(--bg-primary)" }}>
         <div className="flex items-center gap-3">
@@ -41,15 +41,15 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
     )
   }
 
-  if (!owner) {
+  if (!fleetAdmin) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4" style={{ backgroundColor: "var(--bg-primary)" }}>
         <div className="card max-w-md w-full text-center sm:p-8">
           <div className="kicker mb-2">Admin-Dashboard</div>
           <h1 className="font-display font-bold text-2xl mb-2" style={{ color: "var(--text-primary)" }}>Kein Zugriff</h1>
           <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
-            Dieser Bereich ist nur für den Owner. Erzeuge in der Server-Konsole einen Owner-Code und melde dich
-            damit an.
+            Dieser Bereich ist nur für den Projekt-Admin verfügbar. Server-Owner verwalten ihren
+            Server im normalen Dashboard.
           </p>
           <div className="flex gap-2 justify-center">
             <a href="/dashboard" className="btn-secondary text-sm">Zum Dashboard</a>

@@ -1,12 +1,14 @@
 import { ok, serverError, unauthorized, forbidden, badRequest, notFound } from "@/lib/response"
 import { getServiceClient } from "@/lib/supabase"
 import { requireSession } from "@/lib/auth"
+import { isFleetAdmin } from "@/lib/fleet-admin"
 import { ModKillSwitchSchema, validatePathUuid } from "@/lib/validators"
 import { writeAuditLog } from "@/lib/audit"
 
 export const dynamic = "force-dynamic"
 
 // Server-Kill-Switch: Status Player nur fuer diesen Server deaktivieren.
+// Das Projekt-Konto darf jeden Server; ein Server-Owner nur den eigenen.
 export async function PATCH(
   request: Request,
   { params }: { params: { server_id: string } }
@@ -15,7 +17,10 @@ export async function PATCH(
 
   const session = requireSession(request)
   if (!session) return unauthorized()
-  if (session.role !== "owner") return forbidden("Nur der Owner kann Status Player deaktivieren")
+
+  const sb = getServiceClient()
+  const fleetAdmin = await isFleetAdmin(sb, session.sub)
+  if (!fleetAdmin && session.role !== "owner") return forbidden("Kein Zugriff auf diese Aktion")
 
   let body: unknown
   try { body = await request.json() } catch { return badRequest() }
@@ -23,7 +28,6 @@ export async function PATCH(
   const parsed = ModKillSwitchSchema.safeParse(body)
   if (!parsed.success) return badRequest()
 
-  const sb = getServiceClient()
   const { data: server, error } = await (sb as any)
     .from("servers")
     .select("id, owner_uuid")
@@ -31,7 +35,9 @@ export async function PATCH(
     .maybeSingle()
 
   if (error) return serverError()
-  if (!server || server.owner_uuid !== session.sub) return notFound("Server nicht gefunden")
+  if (!server) return notFound("Server nicht gefunden")
+  // Projekt-Konto darf jeden Server; Server-Owner nur den eigenen.
+  if (!fleetAdmin && server.owner_uuid !== session.sub) return notFound("Server nicht gefunden")
 
   const { error: updateError } = await (sb as any)
     .from("servers")

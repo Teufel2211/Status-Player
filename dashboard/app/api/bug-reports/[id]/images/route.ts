@@ -1,6 +1,6 @@
 import { badRequest, forbidden, ok, serverError, unauthorized } from "@/lib/response"
 import { getServiceClient } from "@/lib/supabase"
-import { requireSession } from "@/lib/auth"
+import { requireFleetAdmin } from "@/lib/fleet-admin"
 
 export const dynamic = "force-dynamic"
 export const fetchCache = "force-no-store"
@@ -13,7 +13,7 @@ function parseId(raw: string): number | null {
   return Number.isInteger(id) && id > 0 ? id : null
 }
 
-// Bilder einer Meldung — nur der Owner (signierte URLs, 5 Minuten gültig).
+// Bilder einer Meldung — nur das Projekt-Konto (signierte URLs, 5 Minuten).
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
@@ -21,9 +21,8 @@ export async function GET(
   const id = parseId(params.id)
   if (id === null) return badRequest()
 
-  const session = requireSession(request)
-  if (!session) return unauthorized()
-  if (session.role !== "owner") return forbidden("Nur der Owner sieht Bug-Bilder")
+  const gate = await requireFleetAdmin(request)
+  if (!gate.ok) return gate.status === 401 ? unauthorized() : forbidden("Nur der Projekt-Admin sieht Bug-Bilder")
 
   const sb = getServiceClient()
   const { data: rows, error } = await (sb as any)

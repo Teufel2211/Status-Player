@@ -1,14 +1,16 @@
 import { ok, serverError, unauthorized, forbidden, badRequest } from "@/lib/response"
 import { getServiceClient } from "@/lib/supabase"
-import { requireSession, resolveApiKeyServer } from "@/lib/auth"
+import { resolveApiKeyServer } from "@/lib/auth"
+import { requireFleetAdmin } from "@/lib/fleet-admin"
 import { FleetConfigSchema } from "@/lib/validators"
 import { writeAuditLog } from "@/lib/audit"
 import { encryptSecret, decryptSecret } from "@/lib/hash"
 
 // Fleet config: global dashboard_url + setup_secret pulled by the Fleet mod
 // on every server (secret rotation without file access). Reading requires any
-// valid server API key (same trust as the player sync); writing requires an
-// owner dashboard session.
+// valid server API key (same trust as the player sync); the dashboard UI and
+// writes require the project-admin session (is_fleet_admin — NICHT role
+// "owner", das hat jeder Server-Owner und darf das Setup-Secret nicht sehen).
 //
 // setup_secret liegt verschlüsselt ("enc:"-Präfix); GET entschlüsselt für
 // Mods, Alt-Zeilen ohne Präfix bleiben lesbar (Rollback-Kompatibilität).
@@ -16,11 +18,12 @@ import { encryptSecret, decryptSecret } from "@/lib/hash"
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
-  // Mods authenticate with a server API key; the dashboard UI uses an owner JWT.
+  // Mods authenticate with a server API key; the dashboard UI uses the
+  // project-admin session.
   const keyServerId = await resolveApiKeyServer(request, "check")
   if (!keyServerId) {
-    const session = requireSession(request)
-    if (!session || session.role !== "owner") return unauthorized()
+    const gate = await requireFleetAdmin(request)
+    if (!gate.ok) return gate.status === 401 ? unauthorized() : forbidden("Nur der Projekt-Admin sieht die Verteilung")
   }
 
   const sb = getServiceClient()
@@ -51,9 +54,9 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const session = requireSession(request)
-  if (!session) return unauthorized()
-  if (session.role !== "owner") return forbidden("Nur der Owner kann die Config ändern")
+  const gate = await requireFleetAdmin(request)
+  if (!gate.ok) return gate.status === 401 ? unauthorized() : forbidden("Nur der Projekt-Admin kann die Config ändern")
+  const session = gate.session
 
   let body: unknown
   try { body = await request.json() } catch { return badRequest() }

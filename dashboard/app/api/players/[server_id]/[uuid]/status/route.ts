@@ -1,6 +1,7 @@
 import { ok, serverError, unauthorized, badRequest, forbidden } from "@/lib/response"
 import { getServiceClient } from "@/lib/supabase"
 import { requireSession } from "@/lib/auth"
+import { isFleetAdmin } from "@/lib/fleet-admin"
 import { validatePathUuid, PlayerStatusFieldSchema } from "@/lib/validators"
 import { writeAuditLog } from "@/lib/audit"
 
@@ -17,16 +18,16 @@ export async function PATCH(
   if (!session) return unauthorized()
 
   if (session.role !== "owner" && session.role !== "admin") return forbidden("Nur Owner/Admin können Status ändern")
-  // Der Owner darf serverübergreifend ändern (Admin-Dashboard); alle anderen nur ihren eigenen Server.
-  if (session.server_id !== params.server_id && session.role !== "owner") return unauthorized()
+  // Serverübergreifend nur das Projekt-Konto (Admin-Dashboard); alle anderen
+  // nur ihren eigenen Server. DB-Query nur im Cross-Server-Fall (Short-Circuit).
+  const sb = getServiceClient()
+  if (session.server_id !== params.server_id && !(await isFleetAdmin(sb, session.sub))) return unauthorized()
 
   let body: unknown
   try { body = await request.json() } catch { return badRequest() }
 
   const parsed = PlayerStatusFieldSchema.safeParse(body)
   if (!parsed.success) return badRequest()
-
-  const sb = getServiceClient()
   const updateData: Record<string, unknown> = {}
   if (parsed.data.status !== undefined) {
     updateData.status = parsed.data.status
