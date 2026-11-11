@@ -28,6 +28,7 @@ Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improve
 - Kill switch chat notice: when StatusMod is disabled, players see why (per-server owner notice or global Discord pointer) on join and immediately when the switch changes.
 - License: from 1.4.2 on, Status Player is released under the **Status Player License 1.0** instead of MIT. Running it on your own servers (including monetized ones) and modifying it for private use stay allowed; rebranding it or publishing a modified version as your own mod does not. A continuation may be published if the project has had no release for twelve months. Versions up to and including 1.4.1 remain MIT.
 - Server start no longer prints the attest success line; the build gate state is visible in `/modinfo` instead. Unlocking unknown builds is done in the admin dashboard, not in the per-server owner dashboard.
+- After logging in, the project owner lands directly on the admin dashboard while everyone else — server owners included — lands on the dashboard of their own server. The "Dashboard" button on the landing page routes the same way.
 
 ### Improved
 

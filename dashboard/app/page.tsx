@@ -1,5 +1,6 @@
 import Link from "next/link"
 import Footer from "@/components/footer"
+import DashboardButton from "@/components/dashboard-button"
 
 export default function LandingPage() {
   return (
@@ -26,9 +27,9 @@ export default function LandingPage() {
             <Link href="/login" className="btn-secondary text-base px-7 py-3">
               Anmelden
             </Link>
-            <Link href="/dashboard" className="btn-secondary text-base px-7 py-3">
+            <DashboardButton className="btn-secondary text-base px-7 py-3">
               Dashboard
-            </Link>
+            </DashboardButton>
           </div>
         </div>
       </div>

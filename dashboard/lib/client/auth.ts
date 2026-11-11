@@ -37,6 +37,13 @@ export function getRole(): string | null {
   return typeof payload?.role === "string" ? (payload.role as string) : null
 }
 
+export function getFleetAdmin(): boolean {
+  const token = getAccessToken()
+  if (!token) return false
+  const payload = decodePayload(token)
+  return payload?.is_fleet_admin === true
+}
+
 export function isTokenExpired(): boolean {
   const token = getAccessToken()
   if (!token) return true

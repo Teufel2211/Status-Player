@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Footer from "@/components/footer"
-import { setAccessToken } from "@/lib/client/auth"
+import { setAccessToken, getFleetAdmin } from "@/lib/client/auth"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -47,7 +47,9 @@ export default function LoginPage() {
         return
       }
       setAccessToken(data.access_token)
-      router.push(ownerMode ? "/admin-dashboard" : "/dashboard")
+      // Projekt-Admins landen im Admin-Dashboard, alle anderen (auch
+      // Server-Owner) im Dashboard ihres eigenen Servers.
+      router.push(getFleetAdmin() ? "/admin-dashboard" : "/dashboard")
     } catch {
       setError("Verbindung fehlgeschlagen — bitte erneut versuchen.")
     } finally {

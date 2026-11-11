@@ -87,7 +87,7 @@ export async function POST(request: Request) {
 
   const { data: user, error: userError } = await (sb as any)
     .from("dashboard_users")
-    .select("uuid, role, server_id, totp_secret")
+    .select("uuid, role, server_id, totp_secret, is_fleet_admin")
     .eq("uuid", server.owner_uuid)
     .maybeSingle()
 
@@ -124,6 +124,7 @@ export async function POST(request: Request) {
     sub: user.uuid,
     server_id: user.server_id,
     role: user.role,
+    is_fleet_admin: user.is_fleet_admin === true,
   })
 
   const refreshTokenRaw = crypto.randomUUID()
