@@ -4,7 +4,7 @@ import { getServiceClient } from "@/lib/supabase"
 import { getEnv } from "@/lib/env"
 import { verifyAttestStrings } from "@/lib/attest"
 import { hashIp } from "@/lib/hash"
-import { checkRateLimit, getRateLimitHeaders, RATE_LIMITS } from "@/lib/rate-limit"
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { z } from "zod"
 
 export const dynamic = "force-dynamic"

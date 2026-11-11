@@ -621,7 +621,7 @@ export default function AdminOverviewPage() {
             </div>
             {!fleetAdmin && (
               <p className="text-xs mt-3" style={{ color: "var(--text-muted)" }}>
-                Unbekannte Builds schaltet ausschließlich der Projekt-Owner frei.
+                Unbekannte Builds schaltet ausschließlich der Projekt-Admin frei.
               </p>
             )}
             {fleetAdmin && (

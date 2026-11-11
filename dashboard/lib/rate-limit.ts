@@ -56,6 +56,11 @@ export const RATE_LIMITS = {
   // Server hinter einer IP. Ein 429 blockiert den Mod nie (Fail-open).
   BUILD_CHECK: { windowMs: 60_000, max: 30 },
   BUILD_REGISTER: { windowMs: 60_000, max: 60 },
+  // Mod-Sync (POST push + GET pull), je Server und Methode. Der Mod sendet
+  // 2 Aufrufe pro 30-Sekunden-Zyklus; grosse Server chunken den Push
+  // (>200 Spieler = mehrere POSTs in Folge). Ein 429 schadet nicht: der Mod
+  // geht in Backoff und wiederholt den Zyklus (SyncManager.handleFailure).
+  SYNC: { windowMs: 60_000, max: 20 },
 } as const
 
 const LOGIN_LOCKOUT = {

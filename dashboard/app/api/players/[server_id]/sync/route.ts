@@ -1,6 +1,7 @@
-import { ok, serverError, unauthorized, badRequest, forbidden } from "@/lib/response"
+import { ok, serverError, unauthorized, badRequest, forbidden, tooMany } from "@/lib/response"
 import { getServiceClient } from "@/lib/supabase"
 import { requireApiKey } from "@/lib/auth"
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { validatePathUuid } from "@/lib/validators"
 import { evaluateSyncCode, SYNC_CODE_SELECT, type SyncCodeServerRow } from "@/lib/sync-code"
 import { attestGate, clearAttest, recordAttest, verifyAttest } from "@/lib/attest"
@@ -44,6 +45,11 @@ export async function POST(
   { params }: { params: { server_id: string } }
 ) {
   if (!validatePathUuid(params.server_id)) return badRequest()
+
+  // Rate-Limit vor dem Argon2id-Key-Verify: ein Fluten mit beliebigen
+  // x-api-key-Headern waere sonst CPU-DoS (verify iteriert alle Keys).
+  const syncRate = checkRateLimit(`sync-post:${params.server_id}`, RATE_LIMITS.SYNC)
+  if (!syncRate.allowed) return tooMany()
 
   const authed = await requireApiKey(request, "check", params.server_id)
   if (!authed) return unauthorized()
@@ -201,6 +207,10 @@ export async function GET(
 ) {
   if (!validatePathUuid(params.server_id)) return badRequest()
 
+  // Gleiches Muster wie POST: Limit vor dem Argon2id-Key-Verify.
+  const syncRate = checkRateLimit(`sync-get:${params.server_id}`, RATE_LIMITS.SYNC)
+  if (!syncRate.allowed) return tooMany()
+
   const authed = await requireApiKey(request, "check", params.server_id)
   if (!authed) return unauthorized()
 
@@ -325,6 +335,9 @@ export async function GET(
     .from("audit_log")
     .select("id, action, who_uuid_hash, target_uuid_hash, detail, created_at")
     .eq("server_id", params.server_id)
+    // Neueste zuerst: ohne Order waere unbestimmt, welche 200 Eintraege
+    // bei mehr als 200 neuen Admin-Aktionen fehlen.
+    .order("created_at", { ascending: false })
     .limit(200)
   if (since) adminQuery = adminQuery.gte("created_at", since)
   const { data: adminActions, error: adminError } = await adminQuery
