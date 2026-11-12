@@ -7,7 +7,10 @@ const IV_LENGTH = 16
 const TAG_LENGTH = 16
 
 function getEncryptionKey(): Buffer {
+  // Bewusst hart: ohne Key-Material wuerde SHA-256("") als allgemein bekannter
+  // Schluessel verschluesseln. getEnv() verlangt beide Vars ohnehin.
   const env = process.env.SERVICE_ROLE_KEY ?? process.env.JWT_SECRET ?? ""
+  if (!env) throw new Error("SERVICE_ROLE_KEY/JWT_SECRET missing")
   return crypto.createHash("sha256").update(env).digest()
 }
 
@@ -49,6 +52,9 @@ function sha256Hex(input: string): string {
 // invalidates all sessions + audit linkability (one-time logout for everyone).
 function pepperedHex(input: string): string {
   const pepper = process.env.SERVICE_ROLE_KEY ?? ""
+  // Hart statt still ungepeffert: sonst wandern weak hashes in die DB, falls
+  // eine kuenftige Route frueher persistiert als sie getEnv() aufruft.
+  if (!pepper) throw new Error("SERVICE_ROLE_KEY missing")
   return crypto.createHash("sha256").update(pepper + "|" + input).digest("hex")
 }
 

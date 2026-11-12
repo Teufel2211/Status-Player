@@ -14,7 +14,18 @@ export async function POST(request: Request) {
 
   const { error: playerError } = await (sb as any)
     .from("players")
-    .update({ anonymized: true, username: null, status: null, color: null, settings: null })
+    .update({
+      anonymized: true,
+      username: null,
+      status: null,
+      color: null,
+      settings: null,
+      avatar: null,
+      is_online: false,
+      last_seen: null,
+      status_expires_at: null,
+      slowmode_seconds: 0,
+    })
     .eq("uuid", session.sub)
     .eq("server_id", session.server_id)
 
