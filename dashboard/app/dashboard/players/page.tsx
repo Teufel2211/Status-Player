@@ -23,7 +23,7 @@ export default function PlayersPage() {
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState("")
   const [onlineOnly, setOnlineOnly] = useState(false)
-  const { players: livePlayers, connection } = useRealtimePlayers()
+  const { players: livePlayers, connection, hasSnapshot } = useRealtimePlayers()
 
   useEffect(() => {
     const serverId = getServerId()
@@ -37,16 +37,25 @@ export default function PlayersPage() {
   }, [])
 
   const liveMap = new Map(livePlayers.map((p) => [p.uuid, p]))
+  // Der Live-Feed enthaelt ausschliesslich Online-Spieler (is_online = true).
+  // Ab dem ersten Snapshot ist die Feed-Mitgliedschaft die aktuellere Quelle
+  // fuer Anwesenheit — sonst bleiben Online-Punkt und Zaehler nach dem
+  // Verlassen des Servers haengen (die Liste wird nur einmal geladen).
+  const presenceLive = connection === "connected" && hasSnapshot
 
   const merged = players.map((p) => {
     const live = liveMap.get(p.uuid)
-    if (!live) return p
+    const isOnline = presenceLive ? Boolean(live) : p.is_online
+    if (!live) {
+      return isOnline === p.is_online ? p : { ...p, is_online: isOnline }
+    }
     return {
       ...p,
       username: live.username ?? p.username,
       status: live.status ?? p.status,
       color: live.color ?? p.color,
       avatar: live.avatar ?? p.avatar,
+      is_online: isOnline,
     }
   })
 

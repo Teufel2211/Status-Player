@@ -74,6 +74,45 @@ export function describeAudit(entry: AuditLike): string {
       return "Status Player global aktiviert"
     case "config_update":
       return "Server-Config geändert"
+    case "moderation_settings": {
+      const parts: string[] = []
+      if (typeof d.warn_default_days === "number") parts.push(`Warn-Dauer ${d.warn_default_days} Tage`)
+      if (typeof d.warn_auto_mute_suggestion === "boolean") {
+        parts.push(`Mute-Vorschlag ${d.warn_auto_mute_suggestion ? "an" : "aus"}`)
+      }
+      return parts.length > 0 ? `Moderationseinstellungen geändert: ${parts.join(", ")}` : "Moderationseinstellungen geändert"
+    }
+    case "build_settings":
+      return typeof d.allow_dev_builds === "boolean"
+        ? `Dev-Builds ${d.allow_dev_builds ? "erlaubt" : "gesperrt"}`
+        : "Dev-Build-Einstellung geändert"
+    case "build_override_set": {
+      const build = str(d.build_override_id)
+      return build ? `Build „${build}" für diesen Server freigeschaltet` : "Build für diesen Server freigeschaltet"
+    }
+    case "build_override_cleared":
+      return "Build-Freischaltung zurückgezogen"
+    case "ignore_add": {
+      if (d.permanent === true) return "Spieler dauerhaft blockiert"
+      const mins = typeof d.duration_minutes === "number" ? d.duration_minutes : null
+      const until = fmtDate(d.expires_at)
+      return `Spieler blockiert${mins !== null ? ` · ${mins} Min.` : ""}${until ? ` (bis ${until})` : ""}`
+    }
+    case "ignore_remove":
+      return "Blockierung aufgehoben"
+    case "slowmode": {
+      const secs = typeof d.seconds === "number" ? d.seconds : null
+      return secs !== null ? `Slowmode auf ${secs} Sek. gesetzt` : "Slowmode geändert"
+    }
+    case "warn_add": {
+      const days = typeof d.days === "number" ? d.days : null
+      const reason = str(d.reason)
+      return `Verwarnung erteilt${days !== null ? ` · ${days} Tage` : ""}${reason ? ` · „${reason}"` : ""}`
+    }
+    case "warn_revoke":
+      return "Verwarnung zurückgenommen"
+    case "warn_clear":
+      return "Alle Verwarnungen zurückgenommen"
     default:
       return entry.action
   }

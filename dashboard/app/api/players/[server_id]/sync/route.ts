@@ -10,7 +10,10 @@ import { z } from "zod"
 const PlayerSyncSchema = z.object({
   uuid: z.string().min(1).max(64),
   username: z.string().max(32).optional().nullable(),
-  status: z.string().max(64).optional().nullable(),
+  // Der Mod begrenzt auf 64 Code Points (SyncManager.MAX_STATUS_LENGTH),
+  // Zod zaehlt UTF-16-Code-Units. 64 Emoji = 128 Units -> max(256) verhindert,
+  // dass ein gueltiger Status den kompletten Push-Zyklus mit 400 abbricht.
+  status: z.string().max(256).optional().nullable(),
   color: z.string().max(32).optional().nullable(),
   settings: z.record(z.unknown()).optional().nullable(),
   avatar: z.string().max(160).optional().nullable(),

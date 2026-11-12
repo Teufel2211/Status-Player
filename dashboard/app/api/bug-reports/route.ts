@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic"
 export const fetchCache = "force-no-store"
 
 // Posteingang: alle Meldungen aller Server — nur das Projekt-Konto
-// (Admin-Dashboard). Server-Owner sehen ihre eigenen Meldungen nicht hier,
-// sondern in ihrem Server-Dashboard.
+// (Admin-Dashboard). Server-Owner haben keinen eigenen Posteingang und sehen
+// fremde Meldungen nicht.
 export async function GET(request: Request) {
   const gate = await requireFleetAdmin(request)
   if (!gate.ok) return gate.status === 401 ? unauthorized() : forbidden("Nur der Projekt-Admin sieht den Posteingang")

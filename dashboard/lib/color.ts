@@ -28,6 +28,5 @@ export function cssColor(color?: string | null): string {
     return "#" + v[1] + v[1] + v[2] + v[2] + v[3] + v[3]
   }
   if (/^#[0-9a-f]{6}$/.test(v)) return v
-  if (/^#[0-9a-f]{6}$/i.test(v)) return v.toLowerCase()
   return MC_COLOR_HEX[v] ?? "var(--bg-hover)"
 }
