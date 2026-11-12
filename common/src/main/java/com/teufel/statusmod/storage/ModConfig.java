@@ -130,25 +130,48 @@ public class ModConfig {
         }
     }
 
+    /**
+     * Serialisiert alle Schreibvorgaenge. Kommando-Thread, Sync-Thread
+     * (Wasserstand/Kill-Switch) und Setup-Thread rufen save() parallel auf.
+     * Ohne Lock teilten sie sich dieselbe Temp-Datei (config.json.tmp): zwei
+     * Schreiber ueberlappen, der Move schiebt halbes JSON nach config.json und
+     * serverId/apiKey/syncCode sind weg. Zusaetzlich darf Gson das Objekt nicht
+     * serialisieren, waehrend ein anderer Thread normalize() oder setFeature()
+     * laufen laesst (HashMap -> ConcurrentModificationException).
+     */
+    private static final Object SAVE_LOCK = new Object();
+
     public void save() {
-        try {
-            File configDir = new File("config/statusmod");
-            configDir.mkdirs();
-            normalize();
-            File f = new File(configDir, "config.json");
-            Path target = f.toPath();
-            Path tmp = target.resolveSibling(target.getFileName().toString() + ".tmp");
-            try (Writer writer = Files.newBufferedWriter(tmp)) {
-                PRETTY.toJson(this, writer);
-            }
+        synchronized (SAVE_LOCK) {
+            Path tmp = null;
             try {
-                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (Exception ignored) {
-                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+                File configDir = new File("config/statusmod");
+                configDir.mkdirs();
+                normalize();
+                Path target = new File(configDir, "config.json").toPath();
+                // Eindeutiger Temp-Name statt fester Pfad: selbst wenn ein
+                // zweiter Schreiber ausserhalb des Locks laeuft, ueberschreibt
+                // er die Datei des ersten nicht.
+                tmp = Files.createTempFile(target.getParent(), target.getFileName().toString() + ".", ".tmp");
+                try (Writer writer = Files.newBufferedWriter(tmp)) {
+                    PRETTY.toJson(this, writer);
+                }
+                try {
+                    Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (Exception ignored) {
+                    Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+                tmp = null;
+            } catch (Exception e) {
+                System.err.println("[StatusMod] Failed to save config");
+                e.printStackTrace();
+            } finally {
+                if (tmp != null) {
+                    try {
+                        Files.deleteIfExists(tmp);
+                    } catch (Exception ignored) {}
+                }
             }
-        } catch (Exception e) {
-            System.err.println("[StatusMod] Failed to save config");
-            e.printStackTrace();
         }
     }
 

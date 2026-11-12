@@ -100,11 +100,6 @@ public class StatusCommand {
         statusTree = statusTree.then(Commands.literal("transfer")
         .then(Commands.argument("server", StringArgumentType.word())
         .then(Commands.argument("key", StringArgumentType.word()).executes(ctx -> { return transferFrom(ctx.getSource(), StringArgumentType.getString(ctx, "server"), StringArgumentType.getString(ctx, "key")); }))));
-        statusTree = statusTree.then(Commands.literal("apikey")
-        .then(Commands.argument("key", StringArgumentType.greedyString()).executes(ctx -> { return setApiKey(ctx.getSource(), StringArgumentType.getString(ctx, "key")); })));
-        statusTree = statusTree.then(Commands.literal("transfer")
-        .then(Commands.argument("server", StringArgumentType.word())
-        .then(Commands.argument("key", StringArgumentType.word()).executes(ctx -> { return transferFrom(ctx.getSource(), StringArgumentType.getString(ctx, "server"), StringArgumentType.getString(ctx, "key")); }))));
         statusTree = statusTree.then(Commands.literal("setup-secret")
         .then(Commands.argument("secret", StringArgumentType.greedyString()).executes(ctx -> { return setSetupSecret(ctx.getSource(), StringArgumentType.getString(ctx, "secret")); })));
         }

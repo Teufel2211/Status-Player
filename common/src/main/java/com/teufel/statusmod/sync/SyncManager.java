@@ -901,41 +901,36 @@ public final class SyncManager {
 
         try {
             long wm = java.time.Instant.parse(json.get("server_time").getAsString()).toEpochMilli();
-            // Reload-merge: die Platte ist die Wahrheit (manuelle Edits, Feature-
-            // Commands). Blindes Speichern des (ggf. veralteten) Memory-Objekts
-            // würde fremde Änderungen still zurücksetzen.
-            com.teufel.statusmod.storage.ModConfig fresh =
-                com.teufel.statusmod.storage.ModConfig.load();
-            fresh.lastSyncAtMs = wm;
+            // Live-Objekt mutieren statt Config neu laden und austauschen: ein
+            // Objekt-Tausch hier wuerde parallel gesetzte Felder (Feature-
+            // Commands, Kill-Switch, Sync-Code) verwerfen, weil der Kommando-
+            // Thread noch auf der alten Instanz weiterarbeitet.
+            ModConfig live = StatusMod.getConfig();
+            if (live == null) live = ModConfig.load();
+            live.lastSyncAtMs = wm;
             // In-Memory-Zustand ist die Wahrheit (gerade aus dem Pull gesetzt);
             // ein veralteter Wert auf der Platte darf ihn nicht ueberschreiben.
-            fresh.remoteDisabled = StatusMod.isRemoteDisabled();
-            fresh.save();
-            com.teufel.statusmod.StatusMod.config = fresh;
+            live.remoteDisabled = StatusMod.isRemoteDisabled();
+            live.remoteDisabledScope = StatusMod.getRemoteDisabledScope();
+            live.save();
         } catch (Exception ignored) {}
     }
 
     /**
      * Uebernimmt einen vom Dashboard ausgestellten Sync-Code (Paarung laeuft
-     * automatisch, ohne Admin-Eingriff). Reload-Merge wie in
-     * SetupManager.pollPendingKey: die Platte ist die Wahrheit, nur dieses
-     * eine Feld wird gesetzt. Ein bereits vorhandener Code wird nie
-     * ueberschrieben.
+     * automatisch, ohne Admin-Eingriff). Das Live-Objekt wird mutiert statt
+     * getauscht: ein Tausch wuerde parallel gesetzte Felder (apiKey, Features)
+     * verwerfen. Ein bereits vorhandener Code wird nie ueberschrieben.
      */
     private static void adoptSyncCode(String code) {
         String v = code == null ? "" : code.trim();
         if (v.isEmpty() || v.length() > 64) return;
-        ModConfig current = StatusMod.getConfig();
-        if (current != null && current.syncCode != null && !current.syncCode.isEmpty()) return;
         try {
-            ModConfig fresh = ModConfig.load();
-            if (fresh.syncCode != null && !fresh.syncCode.isEmpty()) {
-                StatusMod.config = fresh;
-                return;
-            }
-            fresh.syncCode = v;
-            fresh.save();
-            StatusMod.config = fresh;
+            ModConfig live = StatusMod.getConfig();
+            if (live == null) return;
+            if (live.syncCode != null && !live.syncCode.isEmpty()) return;
+            live.syncCode = v;
+            live.save();
             System.out.println("[StatusMod] Sync code adopted from dashboard.");
         } catch (Exception e) {
             System.out.println("[StatusMod] Sync code adoption failed: " + e.getMessage());

@@ -50,7 +50,7 @@ public class StatusGuiCommand {
             .requires(ctx -> !StatusMod.isRemoteDisabled())
             .then(Commands.literal("gui")
                 .executes(ctx -> {
-                    if (!PermissionUtil.hasAdminPermission(ctx.getSource())) { ctx.getSource().sendFailure(Component.literal("Du hast nicht genugend Rechte.")); return 0; }
+                    if (!PermissionUtil.hasAdminPermission(ctx.getSource())) { ctx.getSource().sendFailure(Component.literal("Du hast nicht genügend Rechte.")); return 0; }
                     ServerPlayer player = ctx.getSource().getPlayer();
                     if (player == null) { ctx.getSource().sendFailure(Component.literal("Nur Spieler können diesen Befehl nutzen.")); return 0; }
                     openStatusGui(ctx.getSource(), player, 1, null);
@@ -58,7 +58,7 @@ public class StatusGuiCommand {
                 })
                 .then(Commands.argument("page", IntegerArgumentType.integer(1)).suggests((ctx, builder) -> net.minecraft.commands.SharedSuggestionProvider.suggest(new String[]{"1","2","3"}, builder))
                     .executes(ctx -> {
-                        if (!PermissionUtil.hasAdminPermission(ctx.getSource())) { ctx.getSource().sendFailure(Component.literal("Du hast nicht genugend Rechte.")); return 0; }
+                        if (!PermissionUtil.hasAdminPermission(ctx.getSource())) { ctx.getSource().sendFailure(Component.literal("Du hast nicht genügend Rechte.")); return 0; }
                         ServerPlayer player = ctx.getSource().getPlayer();
                         if (player == null) { ctx.getSource().sendFailure(Component.literal("Nur Spieler können diesen Befehl nutzen.")); return 0; }
                         int page = IntegerArgumentType.getInteger(ctx, "page");
@@ -67,7 +67,7 @@ public class StatusGuiCommand {
                     })
                     .then(Commands.argument("search", StringArgumentType.word())
                         .executes(ctx -> {
-                            if (!PermissionUtil.hasAdminPermission(ctx.getSource())) { ctx.getSource().sendFailure(Component.literal("Du hast nicht genugend Rechte.")); return 0; }
+                            if (!PermissionUtil.hasAdminPermission(ctx.getSource())) { ctx.getSource().sendFailure(Component.literal("Du hast nicht genügend Rechte.")); return 0; }
                             ServerPlayer player = ctx.getSource().getPlayer();
                             if (player == null) { ctx.getSource().sendFailure(Component.literal("Nur Spieler können diesen Befehl nutzen.")); return 0; }
                             int page = IntegerArgumentType.getInteger(ctx, "page");
