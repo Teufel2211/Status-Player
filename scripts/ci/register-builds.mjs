@@ -46,7 +46,21 @@ function readAttest(jarPath) {
   if (!sigEntry) throw new Error("statusmod-attest.sig missing (JAR not signed?)");
 
   const jsonBytes = entryContent(jsonEntry);
-  const fields = JSON.parse(jsonBytes.toString("utf8"));
+  let fields;
+  try {
+    fields = JSON.parse(jsonBytes.toString("utf8"));
+  } catch (err) {
+    throw new Error(`statusmod-attest.json is not valid JSON: ${err.message}`);
+  }
+  // Ohne build_id waere die Registry-Zeile wertlos (die ID kommt aus dem
+  // Attest, nicht aus dem Dateinamen): frueh und laut abbrechen statt ein
+  // "undefined"-Build zu registrieren.
+  if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
+    throw new Error("statusmod-attest.json is not a JSON object");
+  }
+  if (typeof fields.build_id !== "string" || fields.build_id.trim() === "") {
+    throw new Error("statusmod-attest.json has no build_id");
+  }
   return {
     buildId: fields.build_id,
     attest: jsonBytes.toString("base64url"),
@@ -56,6 +70,13 @@ function readAttest(jarPath) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// 4xx heisst hier fast immer "dein Request ist falsch" (Token abgelaufen,
+// Attest ungueltig, Body zu gross) - ein Retry kann das nie reparieren und
+// kostet pro JAR nur 8 s. Nur 408/429 sind transient.
+function isPermanentStatus(status) {
+  return status >= 400 && status < 500 && status !== 408 && status !== 429;
 }
 
 async function registerOnce(url, token, payload) {
@@ -73,7 +94,9 @@ async function registerOnce(url, token, payload) {
     });
     const text = await res.text();
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+      const err = new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+      if (isPermanentStatus(res.status)) err.permanent = true;
+      throw err;
     }
     return text;
   } finally {
@@ -88,6 +111,7 @@ async function registerWithRetry(url, token, payload) {
       return await registerOnce(url, token, payload);
     } catch (err) {
       lastError = err;
+      if (err.permanent) throw err;
       if (attempt < RETRY_DELAYS_MS.length) {
         console.warn(`[registry] retry ${attempt + 1}/${RETRY_DELAYS_MS.length} after error: ${err.message}`);
         await sleep(RETRY_DELAYS_MS[attempt]);

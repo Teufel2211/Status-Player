@@ -255,12 +255,17 @@ foreach ($group in $jarGroups.Values) {
 
     $cfOk = $false
     $cfGameVersions = New-Object System.Collections.Generic.List[int]
+    # Pro Gruppe frisch: sonst zeigt die Fehlerdiagnose unten die Werte der
+    # vorherigen Gruppe (PowerShell-Variablen leaken aus der Schleife).
+    $mcId = $null
+    $envId = $null
+    $mcIds = @()
     foreach ($mcVersion in $mcList) {
         # Diagnose: alle Treffer pro Name zeigen (CF-Liste hat Dubletten).
         $hits = @($cfGameVersionCache | Where-Object { $_ -is [pscustomobject] -and $_.name -eq $mcVersion } | ForEach-Object { $_.id })
         $mcId = Get-CfVersionId -Name $mcVersion
         Write-Host "   CF mc '$mcVersion': $($hits.Count) Treffer [$($hits -join ',')], nutze $mcId"
-        if ($mcId) { $cfGameVersions.Add($mcId) }
+        if ($mcId) { $cfGameVersions.Add($mcId); $mcIds += $mcId }
     }
     $loaderId = Get-CfVersionId -Name ($loader.Substring(0,1).ToUpper() + $loader.Substring(1))
     if (-not $loaderId) {
@@ -290,10 +295,10 @@ foreach ($group in $jarGroups.Values) {
         continue
     }
     foreach ($eid in $envIds) { $cfGameVersions.Add([int]$eid) }
-    if ($null -eq $envId) { $envId = ($envIds -join ',') }
+    $envId = ($envIds -join ',')
 
     if ($cfGameVersions.Count -lt 3) {
-        Write-Warning "CurseForge: game version IDs unvollständig (gefunden $($cfGameVersions.Count)/3; MC=$mcId, Loader=$loaderId, Env=$envId) - Gruppe übersprungen"
+        Write-Warning "CurseForge: game version IDs unvollständig (gefunden $($cfGameVersions.Count)/3; MC=$($mcIds -join ','), Loader=$loaderId, Env=$envId) - Gruppe übersprungen"
         $fail++
         continue
     }

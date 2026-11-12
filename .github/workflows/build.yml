@@ -311,16 +311,27 @@ jobs:
           if ($tagExists) {
             Write-Host "Tag $tag exists — deleting to recreate"
             git tag -d $tag
+            if ($LASTEXITCODE -ne 0) { throw "git tag -d $tag failed" }
           }
-
-          git tag $tag
-          git push origin $tag
 
           gh release view $tag 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Release $tag exists — deleting to recreate"
             gh release delete $tag --yes
+            if ($LASTEXITCODE -ne 0) { throw "gh release delete $tag failed" }
           }
+
+          # Remote-Tag ebenfalls loeschen: bei einem Re-Publish (force_publish)
+          # zeigt er sonst auf einen anderen Commit und `git push origin $tag`
+          # wird als non-fast-forward abgelehnt. Ein nicht vorhandener
+          # Remote-Tag ist kein Fehler.
+          git push origin ":refs/tags/$tag" 2>$null
+          Write-Host "Remote tag $tag cleared (if it existed)"
+
+          git tag $tag
+          if ($LASTEXITCODE -ne 0) { throw "git tag $tag failed" }
+          git push origin $tag
+          if ($LASTEXITCODE -ne 0) { throw "git push origin $tag failed" }
           # Dateien explizit aufzählen: ** wird an native Befehle nicht
           # rekursiv expandiert (fabric-JARs liegen eine Ebene tiefer).
           $assetFiles = @(Get-ChildItem -Path dist/multiversion -Recurse -Filter *.jar -File | ForEach-Object { $_.FullName })
@@ -335,3 +346,4 @@ jobs:
             --title "Status Player $ver" `
             --notes-file $changelogFile `
             $assetFiles $sumsFile
+          if ($LASTEXITCODE -ne 0) { throw "gh release create $tag failed" }
