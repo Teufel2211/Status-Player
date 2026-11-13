@@ -37,6 +37,9 @@ Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improve
 - Release builds are obfuscated: internal class names are shortened and debug information (source file names, line numbers, local variable names) is removed. Loader entrypoints, the public API, the dashboard sync and all commands behave unchanged.
 - Dashboard sync pairs itself: on first contact the dashboard issues the sync code and the mod adopts it in the background. No console command and no dashboard page are needed, and a lost pairing re-connects automatically.
 - Sync works for any server size: players, mutes and blocks are pushed in chunks of 200, so the previous silent 200-player ceiling is gone.
+- Dashboard overview: the live feed now shows online players right after connecting instead of waiting for the next push, and status texts of up to 64 characters are accepted again (the dashboard rejected long ones before).
+- Config files are written atomically (unique temp file + lock), so overlapping status changes can no longer leave a truncated `config.json` behind.
+- Re-publishing an already released version no longer fails: CI clears the old release and tag before recreating them.
 
 ### Removed
 
