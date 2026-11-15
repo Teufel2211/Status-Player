@@ -101,6 +101,30 @@ if (-not $targets -or $targets.Count -eq 0) {
     throw "Keine JARs zum Stempeln gefunden."
 }
 
-$results = foreach ($t in $targets) { Set-Stamp $t }
+Write-Host ("Stamping {0} JAR(s) ..." -f $targets.Count)
+# Namen vorab listen: scheitert das Stempeln, ist sonst nicht nachvollziehbar,
+# welche Dateien ueberhaupt gefunden wurden (dist kann Altstaende enthalten).
+$targets | ForEach-Object { Write-Host ("  target: {0} ({1} bytes)" -f $_, (Get-Item -LiteralPath $_).Length) }
+$results = foreach ($t in $targets) {
+    # Ein einzelner Fehlversuch darf den Release nicht kippen: auf dem CI-Runner
+    # kam einmal "A local file header is corrupt" direkt nach dem Build (Datei
+    # noch nicht vollstaendig geflusht). Ein bis zwei Wiederholungen sind
+    # billig; ein wirklich kaputtes JAR scheitert weiterhin - und nennt dann
+    # seinen Pfad, damit der Fehler zuordenbar ist.
+    $attempt = 0
+    while ($true) {
+        $attempt++
+        try {
+            Set-Stamp $t
+            break
+        } catch {
+            if ($attempt -ge 3) {
+                throw "Stempeln fehlgeschlagen fuer '$t' nach $attempt Versuchen: $($_.Exception.Message)"
+            }
+            Write-Host ("  WARN: Stempeln von '{0}' fehlgeschlagen (Versuch {1}/3): {2}" -f $t, $attempt, $_.Exception.Message)
+            Start-Sleep -Milliseconds 750
+        }
+    }
+}
 $results | Format-Table -AutoSize | Out-String | Write-Host
 Write-Host ("Stamped {0} JAR(s)." -f @($results).Count)
