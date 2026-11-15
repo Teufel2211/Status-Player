@@ -1,0 +1,67 @@
+name: Check registry token
+
+# Diagnose fuer das Release-Gate: passt das GitHub-Secret STATUSMOD_BUILD_TOKEN
+# zum Vercel-Env BUILD_REGISTRY_TOKEN?
+#
+# Antwortet POST /api/builds/register mit
+#   400 -> Token akzeptiert (Body ist absichtlich leer/ungueltig) = Paarung ok
+#   401 -> Token abgelehnt, Secret und Env passen nicht zusammen
+#   503 -> BUILD_REGISTRY_TOKEN fehlt im Env des laufenden Deployments
+#
+# Es wird nichts geschrieben (Body absichtlich ungueltig) und kein Geheimnis
+# ausgegeben: nur Statuscode, Token-Laenge und die ersten Zeichen des
+# SHA-256 (zum Vergleich mit der lokalen Token-Datei).
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Basis-URL des Dashboards"
+        required: false
+        default: "https://statusmod-dashboard.vercel.app"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe /api/builds/register
+        shell: bash
+        env:
+          STATUSMOD_BUILD_TOKEN: ${{ secrets.STATUSMOD_BUILD_TOKEN }}
+          BASE_URL: ${{ inputs.url }}
+        run: |
+          node --input-type=module -e '
+          import { createHash } from "node:crypto";
+          const token = process.env.STATUSMOD_BUILD_TOKEN || "";
+          if (!token) {
+            console.log("FAIL: Secret STATUSMOD_BUILD_TOKEN ist leer");
+            process.exit(1);
+          }
+          const fingerprint = createHash("sha256").update(token, "utf8").digest("hex").slice(0, 12);
+          console.log(`tokenLen=${token.length} sha256=${fingerprint}`);
+          const url = (process.env.BASE_URL || "").replace(/\/$/, "") + "/api/builds/register";
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { authorization: "Bearer " + token, "content-type": "application/json" },
+            body: "{}"
+          });
+          const body = await res.text();
+          console.log(`status=${res.status}`);
+          if (res.status === 400) {
+            console.log("OK: Token akzeptiert (Body absichtlich ungueltig) - Paarung stimmt.");
+            process.exit(0);
+          }
+          if (res.status === 401) {
+            console.log("FAIL: Token abgelehnt - GitHub-Secret und Vercel-Env passen nicht zusammen.");
+            process.exit(1);
+          }
+          if (res.status === 503) {
+            console.log("FAIL: BUILD_REGISTRY_TOKEN fehlt im Vercel-Env des laufenden Deployments.");
+            process.exit(1);
+          }
+          console.log("FAIL: unerwartete Antwort: " + body.slice(0, 200));
+          process.exit(1);
+          '
