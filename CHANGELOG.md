@@ -40,6 +40,7 @@ Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improve
 - Dashboard overview: the live feed now shows online players right after connecting instead of waiting for the next push, and status texts of up to 64 characters are accepted again (the dashboard rejected long ones before).
 - Config files are written atomically (unique temp file + lock), so overlapping status changes can no longer leave a truncated `config.json` behind.
 - Re-publishing an already released version no longer fails: CI clears the old release and tag before recreating them.
+- Quilt: the mod loads again with Quilt Loader 0.30.1 and newer. The loader validates license entries against the SPDX list and rejected our custom license name, so `quilt.mod.json` now declares it in long form (name, identifier, link). Older loaders are unaffected.
 
 ### Removed
 

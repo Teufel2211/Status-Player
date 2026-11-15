@@ -11,7 +11,11 @@
       "contributors": {
         "teufel": "Owner"
       },
-      "license": "Status Player License 1.0",
+      "license": {
+        "name": "Status Player License 1.0",
+        "id": "LicenseRef-Status-Player-1.0",
+        "url": "https://github.com/Teufel2211/Status-Player/blob/main/LICENSE"
+      },
       "contact": {
         "homepage": "https://modrinth.com/mod/status-player",
         "sources": "https://github.com/Teufel2211/Status-Player",
