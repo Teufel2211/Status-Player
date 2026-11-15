@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Improved
+
+- `/bug` without text is no longer a dead end: it shows a clickable "Beschreibung eingeben" button that puts `/bug ` into the chat field, and it says up front when bug reports are not set up on the server instead of asking for a text that would be rejected.
+
 ## 1.4.2 - 2026-11-15
 
 Starting with 1.4.2, entries are grouped under **Added**, **Changed**, **Improved** and **Removed**; empty groups are omitted.

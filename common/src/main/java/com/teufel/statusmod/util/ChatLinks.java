@@ -47,4 +47,12 @@ public final class ChatLinks {
     public static Component copyToClipboard(String label, String value, ChatFormatting color, String hover) {
         return button(label, new ClickEvent.CopyToClipboard(value), color, hover);
     }
+
+    /**
+     * Setzt den Befehl nur in das Chat-Eingabefeld (ohne ihn abzuschicken).
+     * Wird z. B. von /bug genutzt, damit "/bug" allein kein Sackgassen-Text ist.
+     */
+    public static Component suggestCommand(String label, String command, ChatFormatting color, String hover) {
+        return button(label, new ClickEvent.SuggestCommand(command), color, hover);
+    }
 }
