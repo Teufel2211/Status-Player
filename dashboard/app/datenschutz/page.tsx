@@ -2,17 +2,17 @@ import type { Metadata } from "next"
 import LegalLayout from "@/components/legal-layout"
 
 export const metadata: Metadata = {
-  title: "Datenschutzerklärung — StatusMod Dashboard",
-  description: "Datenschutzerklärung für das StatusMod Dashboard",
+  title: "Datenschutzerklärung — Status Player Dashboard",
+  description: "Datenschutzerklärung für das Status Player Dashboard",
 }
 
 export default function DatenschutzPage() {
   return (
-    <LegalLayout title="Datenschutzerklärung" updated="31. Juli 2026">
+    <LegalLayout title="Datenschutzerklärung" updated="18. Oktober 2026">
       <h2>1. Verantwortlicher</h2>
       <p>
         Verantwortlicher für die Datenverarbeitung im Sinne der Datenschutz-Grundverordnung (DSGVO) ist der Betreiber
-        des StatusMod-Dashboards. Die Kontaktdaten finden sich im <a href="/impressum">Impressum</a>.
+        des Status Player Dashboards. Die Kontaktdaten finden sich im <a href="/impressum">Impressum</a>.
       </p>
 
       <h2>2. Allgemeine Hinweise</h2>
@@ -49,6 +49,21 @@ export default function DatenschutzPage() {
         Im Rahmen des Dienstes können Spielerinformationen (Nutzername, UUID, Status) verarbeitet werden, die vom
         Minecraft-Server des Nutzers übermittelt werden. Die Verantwortung für diese Daten liegt beim jeweiligen
         Serverbetreiber als Auftraggeber.
+      </p>
+
+      <h3>3.5 Ingame-Bug-Meldungen (/bug) und Screenshots</h3>
+      <p>
+        Meldet ein Spieler über den Ingame-Befehl <code>/bug</code> einen Fehler, übermittelt der Minecraft-Server des
+        Betreibers den Meldetext, den Spielernamen sowie technische Angaben (Server-ID, Mod-Version, Minecraft-Version,
+        Loader) an das Dashboard. Die Meldung wird dort für die Administratoren des jeweiligen Servers gespeichert und
+        angezeigt. Optional kann der Spieler bis zu drei Screenshots anhängen — über die Upload-Seite im Browser oder
+        mit installierter Client-Mod direkt im Spiel. Bilder werden vor dem Upload im Browser bzw. auf dem Client auf
+        maximal 1920 Pixel verkleinert und als JPEG neu kodiert; dadurch entfallene Bild-Metadaten werden nicht
+        übertragen. Die Bilder liegen im privaten Speicher des Dashboards und sind ausschließlich für die
+        Administratoren des jeweiligen Servers über kurzlebige, signierte Links abrufbar. Upload-Codes sind 30 Minuten
+        gültig und werden nur als Hash gespeichert. Die Verarbeitung dient der Fehleranalyse und Nachvollziehbarkeit
+        (Art. 6 Abs. 1 lit. f DSGVO). Die Nutzung des Befehls und der Bild-Upload sind freiwillig; Administratoren
+        können Meldungen inklusive aller Bilder jederzeit löschen.
       </p>
 
       <h2>4. Sicherheit der Verarbeitung</h2>

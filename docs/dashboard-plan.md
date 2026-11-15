@@ -151,6 +151,7 @@ ALLOW_HTTP=false
 | RATE_LIMIT_MAX_CODE_GENERATION | 3 | Pro IP / Window |
 | RATE_LIMIT_MAX_TOTP_VERIFY | 5 | Pro UUID / Window |
 | RATE_LIMIT_MAX_KEY_REVOKE | 3 | Pro Session / Window |
+| RATE_LIMIT_MAX_BUG_REPORT | 3 | Pro Server + Spieler-UUID / 10 Min |
 
 ### API Endpunkte — Auth
 
@@ -169,6 +170,11 @@ ALLOW_HTTP=false
 | Endpunkt | Methode | Auth | Scope | Zweck |
 |----------|---------|------|-------|-------|
 | `/api/health` | GET | Öffentlich | – | Healthcheck |
+| `/api/servers` | GET | Session | – | Serverliste (inkl. `mod_enabled`) + `global_mod_enabled` |
+| `/api/admin/servers` | PATCH | Session (owner) | – | Globaler Kill-Switch (`mod_enabled`) |
+| `/api/admin/servers/:server_id` | PATCH | Session (owner) | – | Server-Kill-Switch (`mod_enabled`) |
+| `/api/players/:server_id/sync` | GET | API-Key | check | Mod-Pull; bei deaktiviertem Mod nur `mod_enabled=false` |
+| `/api/players/:server_id/sync` | POST | API-Key | check | Mod-Push; bei deaktiviertem Mod `synced:0` |
 | `/api/keys` | GET | Session | – | API-Keys auflisten |
 | `/api/keys` | POST | Session | – | API-Key generieren |
 | `/api/keys/:id` | DELETE | Session | – | Key revoken (Route VOR `/api/keys/leak` registrieren, sonst wird `leak` als `:id` interpretiert) |
@@ -180,11 +186,27 @@ ALLOW_HTTP=false
 | `/api/players/:server_id/:uuid/mute` | POST | Session | – | Muten |
 | `/api/players/:server_id/:uuid/unmute` | POST | Session | – | Entmuten |
 | `/api/players/:server_id/:uuid/blocked` | GET | API-Key | check | Ist geblockt/gemuted? |
-| `/api/presets/:server_id` | GET | API-Key | check | Custom-Presets |
-| `/api/presets/:server_id/:name` | DELETE | Session | – | Preset löschen |
+| `/api/presets/:server_id` | GET | API-Key | check | Server-Presets (Mod-Sync + Dashboard) |
+| `/api/presets/:server_id` | POST | Session | – | Preset anlegen/überschreiben (owner, eigener Server) |
+| `/api/presets/:server_id/:name` | DELETE | Session | – | Preset löschen (owner, eigener Server) |
 | `/api/audit/:server_id` | GET | API-Key | audit | Audit-Log |
 | `/api/server/:server_id/config` | GET | API-Key | check | Config lesen |
 | `/api/server/:server_id/config` | PUT | Session | – | Config schreiben |
+| `/api/server/:server_id/moderation` | GET | Session/API-Key | check | Warn-Einstellungen (`warn_default_days`, `warn_auto_mute_suggestion`) |
+| `/api/server/:server_id/moderation` | PUT | Session | – | Warn-Einstellungen ändern (owner) |
+| `/api/players/:server_id/:uuid/warnings` | GET | Session | – | Aktive + abgelaufene Warnungen |
+| `/api/players/:server_id/:uuid/warnings` | POST | Session | – | Warnung vergeben (max. 3 aktiv) |
+| `/api/players/:server_id/:uuid/warnings/:id` | DELETE | Session | – | Warnung zurücknehmen |
+| `/api/players/:server_id/:uuid/slowmode` | PUT | Session | – | Slowmode pro Spieler (Sekunden, 0 = aus) |
+| `/api/players/:server_id/:uuid/ignore` | POST | Session | – | Kurzzeit-Ignore starten |
+| `/api/players/:server_id/:uuid/ignore` | DELETE | Session | – | Kurzzeit-Ignore beenden |
+| `/api/bug-report` | POST | API-Key | check | Ingame-Bugmeldung → Dashboard-Posteingang; Antwort enthält Upload-Code (30 Min) für Bilder |
+| `/api/bug-report/image?c=` | GET | – | – | Status des Upload-Codes (gültig, abgelaufen, belegte Plätze) |
+| `/api/bug-report/image?c=` | POST | – | – | Screenshot-Upload (Roh-Body, PNG/JPEG/WebP, max. 3 MB, max. 3 pro Meldung) |
+| `/api/bug-reports/:server_id` | GET | Session | – | Bug-Meldungen (neueste zuerst, inkl. Bild-Anzahl) |
+| `/api/bug-reports/:server_id/:id/images` | GET | Session | – | Signierte Bild-URLs einer Meldung (5 Min gültig, owner-only) |
+| `/api/bug-reports/:server_id/:id` | PATCH | Session | – | Meldung offen/erledigt setzen |
+| `/api/bug-reports/:server_id/:id` | DELETE | Session | – | Meldung löschen |
 
 ### ~~API Endpunkte — Shop~~ (ENTFERNT 2026-08-01)
 
@@ -194,7 +216,7 @@ Shop-Features (Produkte, Premium-Status, Käufe, Stripe) wurden vollständig ent
 
 | Transport | Details |
 |-----------|---------|
-| **Polling** | Mod fragt alle 60s `/api/players/:server/:uuid/updates?since=` ab. Nur Timestamp + UUID + Status + Color. |
+| **Polling** | Mod zieht alle 15s `/api/players/:server_id/sync?since=` (Push alle 30s). Der Kill-Switch wird über denselben Pull verteilt. |
 | **Push (opt.)** | Supabase Realtime via WebSocket-Proxy. Fallback auf Polling. |
 | **Auth** | API-Key (Mod-Config). Rate-Limited. |
 | **Payload** | Max 1KB pro Update. |

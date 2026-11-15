@@ -88,7 +88,7 @@ public class PermissionUtil {
                 if (checkLuckyPermsPermission(player, StatusMod.getConfig().adminPermissionNode)) return true;
             }
         } catch (Exception ignored) {}
-        int requiredLevel = Math.max(1, StatusMod.getConfig() != null ? StatusMod.getConfig().adminOpLevel : 2);
+        int requiredLevel = Math.max(1, StatusMod.getConfig() != null ? StatusMod.getConfig().adminOpLevel : 4);
         MinecraftServer server = serverOf(player);
         if (server != null && opLevelOf(server, player) >= requiredLevel) return true;
         return tierLevelOf(playerPermissions(player)) >= requiredLevel;
@@ -96,9 +96,9 @@ public class PermissionUtil {
 
     private static int requiredOpLevel() {
         try {
-            if (StatusMod.getConfig() != null) return Math.max(0, StatusMod.getConfig().adminOpLevel);
+            if (StatusMod.getConfig() != null) return Math.max(1, StatusMod.getConfig().adminOpLevel);
         } catch (Exception ignored) {}
-        return 2;
+        return 4;
     }
 
     private static boolean hasOpLevel(CommandSourceStack src, ServerPlayer player, int requiredLevel) {

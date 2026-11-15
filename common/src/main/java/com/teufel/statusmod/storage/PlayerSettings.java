@@ -15,6 +15,9 @@ public class PlayerSettings {
 
     public long lastStatusChangeAtMs = 0L;
     public long statusExpiresAtMs = 0L;
+    /** Status/color stashed when a timed status was applied, restored on expiry. */
+    public String timedPrevStatus = "";
+    public String timedPrevColor = "reset";
 
     public long lastActivityAtMs = System.currentTimeMillis();
     public boolean autoAfk = false;

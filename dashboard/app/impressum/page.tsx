@@ -2,8 +2,8 @@ import type { Metadata } from "next"
 import LegalLayout from "@/components/legal-layout"
 
 export const metadata: Metadata = {
-  title: "Impressum — StatusMod Dashboard",
-  description: "Impressum für das StatusMod Dashboard",
+  title: "Impressum — Status Player Dashboard",
+  description: "Impressum für das Status Player Dashboard",
 }
 
 export default function ImpressumPage() {
@@ -11,7 +11,7 @@ export default function ImpressumPage() {
     <LegalLayout title="Impressum" updated="31. Juli 2026">
       <h2>Angaben gemäß § 5 DDG</h2>
       <p>
-        StatusMod Dashboard
+        Status Player Dashboard
         <br />
         [Dein vollständiger Name]
         <br />

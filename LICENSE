@@ -1,21 +1,103 @@
-MIT License
+Status Player License 1.0
 
-Copyright (c) 2026 Teufel
+Copyright (c) 2026 Teufel ("the Author")
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This license applies to Status Player version 1.4.2 and to every later version
+of the Software. Versions published before 1.4.2 were released under the MIT
+License and remain under the MIT License; see LICENSE-MIT-legacy.txt.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+By using, copying, modifying or distributing the Software you accept the terms
+of this license.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+1. Definitions
+
+1.1 "Software" means the Status Player Minecraft mod, including its compiled
+    JAR files, source code, assets, documentation and any part of them.
+
+1.2 "Original Project" means the Status Player project published by the Author
+    at https://github.com/Teufel2211/Status-Player.
+
+1.3 "Release" means any version of the Original Project that the Author has
+    published publicly, for example on Modrinth, CurseForge or GitHub Releases.
+
+1.4 "Rebranding" means changing, removing or obscuring the name "Status Player",
+    the mod identifier "statusmod", the Author's credits, or presenting the
+    Software, or a modified version of it, as an independent work of your own.
+
+2. What you may do
+
+2.1 You may use and run the Software, including on your own Minecraft servers,
+    including servers you monetize, without paying anything.
+
+2.2 You may make copies of the Software for private use, for backups, and for
+    installing it on servers and clients you operate.
+
+2.3 You may modify the Software for private use. Private use means that neither
+    the modified Software nor anything derived from it is distributed or
+    published.
+
+2.4 You may distribute complete, unmodified copies of the Software, provided
+    that (a) the copy is not modified in any way, (b) it keeps the name
+    "Status Player" and the mod identifier "statusmod", (c) this license is
+    included, and (d) you do not claim authorship of the Software.
+
+3. What you may not do
+
+3.1 You may not rebrand the Software.
+
+3.2 You may not publish, upload or distribute a modified version of the
+    Software, or a version derived from it, unless Section 4 applies.
+
+3.3 You may not remove, alter or hide copyright notices, author credits,
+    license notices or build identifiers contained in the Software.
+
+3.4 You may not use the name, logo or other branding of the Author in a way
+    that suggests the Author endorses, sponsors or is responsible for your
+    version.
+
+4. Continuation after the project has been abandoned
+
+4.1 If the Original Project has had no Release for at least twelve (12)
+    consecutive months, you may publish a modified version of the Software
+    ("Continuation") under the conditions of this section.
+
+4.2 A Continuation may carry its own name. Rebranding is permitted for
+    Continuations only.
+
+4.3 A Continuation must clearly state, both in its project description and in
+    its in-game mod metadata, that it is based on Status Player, and must link
+    to the Original Project.
+
+4.4 A Continuation must not claim the original work as its own and must not
+    suggest that the Author endorses or is responsible for it.
+
+4.5 This license continues to apply to every part of the Software contained in
+    a Continuation. You may license your own additions under any terms, as long
+    as those terms do not restrict the rights granted here for the inherited
+    parts.
+
+4.6 The twelve-month period is measured from the date of the most recent
+    Release of the Original Project.
+
+5. Termination
+
+5.1 Any breach of this license ends all rights granted to you under it.
+
+5.2 On termination you must stop using, distributing and publishing the
+    Software and destroy the copies you hold, except where a statutory right
+    allows otherwise.
+
+6. Warranty and liability
+
+6.1 The Software is provided "as is", without warranty of any kind, express or
+    implied, including but not limited to the warranties of merchantability,
+    fitness for a particular purpose and non-infringement.
+
+6.2 To the maximum extent permitted by law, the Author is not liable for any
+    claim, damage or other liability arising from the Software or from the use
+    of the Software.
+
+7. Contact
+
+Questions about this license:
+https://github.com/Teufel2211/Status-Player/issues

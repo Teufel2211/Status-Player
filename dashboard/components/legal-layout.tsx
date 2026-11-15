@@ -23,7 +23,7 @@ export default function LegalLayout({
           <p className="text-xs font-mono text-[var(--text-muted)]">Zuletzt aktualisiert: {updated}</p>
         </div>
 
-        <div className="card prose prose-invert prose-sm max-w-none prose-headings:font-display prose-headings:text-[var(--text-primary)] prose-p:text-[var(--text-secondary)] prose-li:text-[var(--text-secondary)] prose-a:text-[var(--accent)] prose-strong:text-[var(--text-primary)]">
+        <div className="card prose prose-sm max-w-none dark:prose-invert prose-headings:font-display prose-headings:text-[var(--text-primary)] prose-p:text-[var(--text-secondary)] prose-li:text-[var(--text-secondary)] prose-a:text-[var(--accent-text)] prose-strong:text-[var(--text-primary)]">
           {children}
         </div>
       </div>

@@ -14,7 +14,7 @@ import java.util.Iterator;
 import java.util.Map;
 
 public class ModConfig {
-    public int adminOpLevel = 2;
+    public int adminOpLevel = 4;
     public String statusPermissionNode = "statusmod.use";
     public String adminPermissionNode = "statusmod.admin";
     public boolean enableAdminOverrides = true;
@@ -31,7 +31,7 @@ public class ModConfig {
     public Map<String, Boolean> features = new HashMap<>();
 
     private static final String[] FEATURE_KEYS = {
-        "status", "badge", "afk", "block", "mute", "presets", "code", "sync"
+        "status", "badge", "afk", "block", "mute", "presets", "code", "sync", "bug", "warn", "slowmode"
     };
 
     public boolean isEnabled(String key) {
@@ -60,11 +60,32 @@ public class ModConfig {
     public boolean restoreAfkOnJoin = false;
     public boolean restoreTimedOnJoin = true;
 
-    public String dashboardUrl = "https://statusmod-dashboard.vercel.app";
+    /**
+     * Kein Default mehr: eine frische Mod-Kopie ohne eigene config.json zeigt
+     * damit auf kein Dashboard. Frueher stand hier die Autoren-URL, wodurch
+     * jede Kopie automatisch am Dashboard des Autors hing.
+     */
+    public String dashboardUrl = "";
     public String setupSecret = "";
     public String serverId = "";
     public String apiKey = "";
+    /**
+     * Vom Dashboard ausgestellter Sync-Bestaetigungscode. Leer = nicht
+     * bestaetigt; dann startet der Sync nicht. Wird nie geloggt.
+     */
+    public String syncCode = "";
     public long lastSyncAtMs = 0L;
+    /**
+     * Zuletzt vom Dashboard gemeldeter Kill-Switch-Zustand. Persistiert, damit
+     * ein Server nach einem Neustart nicht fuer bis zu 15 Sekunden wieder
+     * aktiv ist, bevor der erste Sync-Pull das Flag holt.
+     */
+    public boolean remoteDisabled = false;
+    /**
+     * "global" wenn der Fleet-Owner alle Server abgeschaltet hat, sonst
+     * "server". Steuert die Chat-Meldung beim Join.
+     */
+    public String remoteDisabledScope = "server";
 
     private static final Gson GSON = new Gson();
     // Pretty printer for config saves: one setting per line ("key": value).
@@ -109,25 +130,48 @@ public class ModConfig {
         }
     }
 
+    /**
+     * Serialisiert alle Schreibvorgaenge. Kommando-Thread, Sync-Thread
+     * (Wasserstand/Kill-Switch) und Setup-Thread rufen save() parallel auf.
+     * Ohne Lock teilten sie sich dieselbe Temp-Datei (config.json.tmp): zwei
+     * Schreiber ueberlappen, der Move schiebt halbes JSON nach config.json und
+     * serverId/apiKey/syncCode sind weg. Zusaetzlich darf Gson das Objekt nicht
+     * serialisieren, waehrend ein anderer Thread normalize() oder setFeature()
+     * laufen laesst (HashMap -> ConcurrentModificationException).
+     */
+    private static final Object SAVE_LOCK = new Object();
+
     public void save() {
-        try {
-            File configDir = new File("config/statusmod");
-            configDir.mkdirs();
-            normalize();
-            File f = new File(configDir, "config.json");
-            Path target = f.toPath();
-            Path tmp = target.resolveSibling(target.getFileName().toString() + ".tmp");
-            try (Writer writer = Files.newBufferedWriter(tmp)) {
-                PRETTY.toJson(this, writer);
-            }
+        synchronized (SAVE_LOCK) {
+            Path tmp = null;
             try {
-                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (Exception ignored) {
-                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+                File configDir = new File("config/statusmod");
+                configDir.mkdirs();
+                normalize();
+                Path target = new File(configDir, "config.json").toPath();
+                // Eindeutiger Temp-Name statt fester Pfad: selbst wenn ein
+                // zweiter Schreiber ausserhalb des Locks laeuft, ueberschreibt
+                // er die Datei des ersten nicht.
+                tmp = Files.createTempFile(target.getParent(), target.getFileName().toString() + ".", ".tmp");
+                try (Writer writer = Files.newBufferedWriter(tmp)) {
+                    PRETTY.toJson(this, writer);
+                }
+                try {
+                    Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (Exception ignored) {
+                    Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+                tmp = null;
+            } catch (Exception e) {
+                System.err.println("[StatusMod] Failed to save config");
+                e.printStackTrace();
+            } finally {
+                if (tmp != null) {
+                    try {
+                        Files.deleteIfExists(tmp);
+                    } catch (Exception ignored) {}
+                }
             }
-        } catch (Exception e) {
-            System.err.println("[StatusMod] Failed to save config");
-            e.printStackTrace();
         }
     }
 
@@ -192,6 +236,13 @@ public class ModConfig {
         else serverId = serverId.trim();
         if (apiKey == null) apiKey = "";
         else apiKey = stripQuotes(apiKey.trim());
+        if (syncCode == null) syncCode = "";
+        else syncCode = stripQuotes(syncCode.trim());
+        if (remoteDisabledScope == null) remoteDisabledScope = "server";
+        else {
+            remoteDisabledScope = remoteDisabledScope.trim().toLowerCase();
+            if (!remoteDisabledScope.equals("global")) remoteDisabledScope = "server";
+        }
     }
 
     /** Removes surrounding quotes that sneak in via copy-paste (breaks key matching). */

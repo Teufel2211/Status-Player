@@ -403,7 +403,7 @@ $gradleProps = Join-Path $root "gradle.properties"
 $matrixFile = Join-Path $root $MatrixPath
 $packFormatFile = Join-Path $root $PackFormatMapPath
 $loaderVersionsFile = Join-Path $root $LoaderVersionsPath
-$outputRoot = Join-Path $root $OutputDir
+$outputRoot = if ([IO.Path]::IsPathRooted($OutputDir)) { $OutputDir } else { Join-Path $root $OutputDir }
 $reportFile = Join-Path $outputRoot "build-report.json"
 $markdownReportFile = Join-Path $outputRoot "build-report.md"
 $modVersion = (Get-Content -LiteralPath (Join-Path $root "version.txt") -Raw).Trim()
@@ -808,7 +808,10 @@ try {
                 # remove fabric.mod.json, inject quilt.mod.json, and repackage.
                 if ($loader -eq "quilt") {
                     $fabricJarDir = Join-Path $outputRoot "fabric"
-                    $fabricJar = Get-ChildItem -Path $fabricJarDir -Filter "Statusmod-*-fabric-$mc.jar" -File -Recurse -ErrorAction SilentlyContinue |
+                    # WICHTIG: exakt auf diese Version filtern. Liegen im dist-Ordner
+                    # noch Staende aelterer Versionen (z. B. 1.4.0), gewinnt sonst
+                    # alphabetisch der aelteste Jar und Quilt wuerde Altcode verpacken.
+                    $fabricJar = Get-ChildItem -Path $fabricJarDir -Filter "Statusmod-$modVersion-fabric-$mc.jar" -File -Recurse -ErrorAction SilentlyContinue |
                         Where-Object { $_.Name -notlike "*-sources.jar" } |
                         Select-Object -First 1
                     if (-not $fabricJar) {
@@ -980,15 +983,18 @@ try {
             # (Loader/fabric26.1) no longer exists.
             if ($isFabricExtra) {
                 $plainScript = Join-Path $PSScriptRoot "build-fabric26-plain.ps1"
+                $artifactPath = Join-Path $versionOut "Statusmod-$modVersion-$loader-$mc.jar"
+                # Ein Altstand im Zielordner (z. B. obfuskiertes Release-JAR) darf den
+                # Erfolgs-Check nicht erfuellen - sonst gilt ein nicht gebautes JAR als "ok".
+                if (Test-Path -LiteralPath $artifactPath) { Remove-Item -LiteralPath $artifactPath -Force }
                 $prevEap = $ErrorActionPreference
                 $ErrorActionPreference = "Continue"
                 try {
-                    & $plainScript -McVersion $mc -ModVersion $modVersion -JavaHome $resolvedFabricJava25Home
+                    & $plainScript -McVersion $mc -ModVersion $modVersion -JavaHome $resolvedFabricJava25Home -OutRoot (Join-Path $outputRoot "fabric")
                 } finally {
                     $ErrorActionPreference = $prevEap
                 }
                 $exit = if (Test-Path Variable:\LASTEXITCODE) { $LASTEXITCODE } else { 0 }
-                $artifactPath = Join-Path $versionOut "Statusmod-$modVersion-$loader-$mc.jar"
                 if (($exit -eq 0) -and (Test-Path -LiteralPath $artifactPath)) {
                     $results.Add([pscustomobject]@{
                         loader = $loader
@@ -1148,6 +1154,18 @@ Write-Host ""
 Write-Host "Build report: $reportFile"
 Write-Host "Markdown report: $markdownReportFile"
 $results | Format-Table -AutoSize | Out-String | Write-Host
+
+# Build-Fingerprint stempeln (statusmod-build.txt im JAR-Root). Passiert nach dem
+# Kopieren, weil der Hash das fertige JAR beschreibt. StatusMod.BUILD_ID liest
+# den Wert beim Start; er erscheint nie im Dateinamen oder in Metadaten.
+if (-not $DryRun) {
+    try {
+        & (Join-Path $PSScriptRoot "stamp-build.ps1") -OutputDir $OutputDir
+    } catch {
+        Write-Host "Warning: failed to stamp build fingerprint: $($_.Exception.Message)"
+        if (-not $ContinueOnError) { exit 1 }
+    }
+}
 
 $failed = @($results | Where-Object { $_.status -eq "failed" }).Count
 if ($failed -gt 0 -and -not $ContinueOnError) {

@@ -1,3 +1,4 @@
+import crypto from "crypto"
 import { badRequest, unauthorized, serverError, ok } from "@/lib/response"
 import { getServiceClient } from "@/lib/supabase"
 import { getEnv } from "@/lib/env"
@@ -9,13 +10,21 @@ import { NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
 
+/** Konstantzeit-Vergleich ueber SHA-256-Digests (wie builds/register). */
+function tokenMatches(given: string, expected: string): boolean {
+  const a = crypto.createHash("sha256").update(given).digest()
+  const b = crypto.createHash("sha256").update(expected).digest()
+  return crypto.timingSafeEqual(a, b)
+}
+
 export async function GET(request: Request) {
   const env = getEnv()
   const expectedSecret = env.MOD_SETUP_SECRET
   if (!expectedSecret) return unauthorized()
 
   const auth = request.headers.get("authorization") ?? ""
-  if (auth !== `Bearer ${expectedSecret}`) return unauthorized()
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : ""
+  if (!token || !tokenMatches(token, expectedSecret)) return unauthorized()
 
   const ip = request.headers.get("x-forwarded-for") ?? "unknown"
   const rl = checkRateLimit(`setup_pending:${ip}`, RATE_LIMITS.CODE_GENERATION)

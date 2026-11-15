@@ -20,6 +20,26 @@ export async function GET(request: Request) {
   if (!session) return unauthorized()
 
   const sb = getServiceClient()
+  const serverId = session.server_id
+
+  const loadPlayers = async () => {
+    const { data, error } = await (sb as any)
+      .from("players")
+      .select("uuid, username, status, color, avatar, updated_at")
+      .eq("server_id", serverId)
+      .eq("is_online", true)
+      .order("updated_at", { ascending: false })
+      .limit(100)
+    if (error) throw new Error(error.message)
+    return data ?? []
+  }
+
+  // Erster Snapshot VOR dem Stream-Aufbau: sonst bekommt das Dashboard bis zu
+  // 30 s lang gar kein players-Event (der erste Push kam bisher aus dem Intervall).
+  let initial: unknown[] | null = null
+  try {
+    initial = await loadPlayers()
+  } catch { /* erster Intervall-Push holt es nach */ }
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -33,22 +53,14 @@ export async function GET(request: Request) {
         } catch { /* ignore */ }
       }
 
-      send("connected", { server_id: session!.server_id })
+      send("connected", { server_id: serverId })
+      if (initial) send("players", initial)
 
       const interval = setInterval(async () => {
         if (closed) { clearInterval(interval); return }
         try {
-          const { data } = await (sb as any)
-            .from("players")
-            .select("uuid, username, status, color, avatar, updated_at")
-            .eq("server_id", session!.server_id)
-            .eq("is_online", true)
-            .order("updated_at", { ascending: false })
-            .limit(100)
-
-          if (data && !closed) {
-            send("players", data ?? [])
-          }
+          const data = await loadPlayers()
+          if (!closed) send("players", data)
         } catch { /* silent */ }
       }, 30_000)
 

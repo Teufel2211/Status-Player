@@ -1,3 +1,4 @@
+import crypto from "crypto"
 import { badRequest, ok, serverError, unauthorized } from "@/lib/response"
 import { getServiceClient } from "@/lib/supabase"
 import { getEnv } from "@/lib/env"
@@ -5,14 +6,21 @@ import { getEnv } from "@/lib/env"
 
 export const dynamic = "force-dynamic"
 
+/** Konstantzeit-Vergleich ueber SHA-256-Digests (wie builds/register). */
+function tokenMatches(given: string, expected: string): boolean {
+  const a = crypto.createHash("sha256").update(given).digest()
+  const b = crypto.createHash("sha256").update(expected).digest()
+  return crypto.timingSafeEqual(a, b)
+}
+
 export async function POST(request: Request) {
   const authHeader = request.headers.get("authorization")
   if (!authHeader?.startsWith("Bearer ")) return unauthorized()
 
-  const token = authHeader.slice(7)
+  const token = authHeader.slice(7).trim()
   const secret = getEnv().DISCORD_WEBHOOK_SECRET
   // Fail closed: without a configured secret, no webhook call is trusted.
-  if (!secret || token !== secret) return unauthorized()
+  if (!secret || !token || !tokenMatches(token, secret)) return unauthorized()
 
   let body: unknown
   try { body = await request.json() } catch { return badRequest() }

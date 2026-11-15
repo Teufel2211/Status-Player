@@ -107,6 +107,14 @@ public final class StatusSidebar {
         }
     }
 
+    /** Blendet die Status-Sidebar aus (Kill-Switch). */
+    public static void hide(MinecraftServer server) {
+        if (server == null) return;
+        try {
+            hide(server.getScoreboard());
+        } catch (Throwable ignored) {}
+    }
+
     private static void hide(Scoreboard scoreboard) {
         try {
             Objective objective = scoreboard.getObjective(OBJECTIVE_ID);

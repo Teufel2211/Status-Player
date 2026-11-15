@@ -1,6 +1,7 @@
 package com.teufel.statusmod.gui;
 
 import com.teufel.statusmod.command.StatusCommand;
+import com.teufel.statusmod.util.DurationUtil;
 import com.mojang.datafixers.util.Pair;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -236,6 +237,11 @@ public class SelfStatusMenu extends AbstractContainerMenu {
             lore.add(line);
         }
         lore.add(Component.literal("Wird nach jeder Aktion aktualisiert.").withStyle(ChatFormatting.DARK_GRAY));
+        long expiresAt = StatusCommand.getOwnStatusExpiresAt(cmdSource);
+        String remaining = DurationUtil.formatRemaining(expiresAt);
+        if (!remaining.isEmpty()) {
+            lore.add(Component.literal("Läuft ab in: " + remaining).withStyle(ChatFormatting.GOLD));
+        }
         return makeItem(Items.PAPER, "Dein Status", ChatFormatting.YELLOW, lore);
     }
 

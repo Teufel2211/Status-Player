@@ -1,0 +1,21 @@
+Status Player License 1.0
+Copyright (c) 2026 Teufel
+
+This build is licensed under the Status Player License 1.0, not under MIT.
+The full license text is part of the project repository:
+https://github.com/Teufel2211/Status-Player/blob/main/LICENSE
+
+In short:
+
+- You may use this mod on your own servers, including monetized servers.
+- You may modify it for private use.
+- You may redistribute complete, unmodified copies that keep the name
+  "Status Player" and the mod identifier "statusmod".
+- You may not rebrand it, and you may not publish modified versions of it.
+
+Exception: if the original project has had no release for at least twelve
+months, you may publish a continuation, including under your own name, as long
+as it states that it is based on Status Player and links back to the original
+project. See section 4 of the license for the exact conditions.
+
+Versions up to and including 1.4.1 were published under the MIT License.

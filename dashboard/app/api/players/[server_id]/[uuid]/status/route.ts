@@ -1,6 +1,7 @@
 import { ok, serverError, unauthorized, badRequest, forbidden } from "@/lib/response"
 import { getServiceClient } from "@/lib/supabase"
 import { requireSession } from "@/lib/auth"
+import { isFleetAdmin } from "@/lib/fleet-admin"
 import { validatePathUuid, PlayerStatusFieldSchema } from "@/lib/validators"
 import { writeAuditLog } from "@/lib/audit"
 
@@ -16,18 +17,24 @@ export async function PATCH(
   const session = requireSession(request)
   if (!session) return unauthorized()
 
-  if (session.server_id !== params.server_id) return unauthorized()
   if (session.role !== "owner" && session.role !== "admin") return forbidden("Nur Owner/Admin können Status ändern")
+  // Serverübergreifend nur das Projekt-Konto (Admin-Dashboard); alle anderen
+  // nur ihren eigenen Server. DB-Query nur im Cross-Server-Fall (Short-Circuit).
+  const sb = getServiceClient()
+  if (session.server_id !== params.server_id && !(await isFleetAdmin(sb, session.sub))) return unauthorized()
 
   let body: unknown
   try { body = await request.json() } catch { return badRequest() }
 
   const parsed = PlayerStatusFieldSchema.safeParse(body)
   if (!parsed.success) return badRequest()
-
-  const sb = getServiceClient()
   const updateData: Record<string, unknown> = {}
-  if (parsed.data.status !== undefined) updateData.status = parsed.data.status
+  if (parsed.data.status !== undefined) {
+    updateData.status = parsed.data.status
+    // Dashboard-Edit beendet einen laufenden Timed-Status (der Mod raeumt
+    // beim Pull ebenfalls Ablaufzeit + Stash).
+    updateData.status_expires_at = null
+  }
   if (parsed.data.color !== undefined) updateData.color = parsed.data.color
 
   const { data: existing, error: findError } = await (sb as any)

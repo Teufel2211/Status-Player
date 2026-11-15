@@ -93,13 +93,13 @@ public final class SetupManager {
             try {
                 String apiKey = fetchPendingKey(CodeGenerator.trimTrailingSlash(config.effectiveDashboardUrl()), config.serverId, config.effectiveSetupSecret());
                 if (apiKey != null) {
-                    // Reload first: the static config may have been replaced
-                    // (config reload) while polling — never clobber it.
-                    com.teufel.statusmod.storage.ModConfig fresh =
-                        com.teufel.statusmod.storage.ModConfig.load();
-                    fresh.apiKey = apiKey;
-                    fresh.save();
-                    com.teufel.statusmod.StatusMod.config = fresh;
+                    // Live-Objekt mutieren statt Config tauschen: der Tausch
+                    // wuerde parallel gesetzte Felder (serverId, Features,
+                    // Sync-Code) verwerfen.
+                    ModConfig live = StatusMod.getConfig();
+                    if (live == null) live = ModConfig.load();
+                    live.apiKey = apiKey;
+                    live.save();
                     System.out.println("[StatusMod] API-Key automatically fetched. Server setup complete.");
                     SyncManager.retryStart();
                     return;

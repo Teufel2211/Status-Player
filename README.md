@@ -1,11 +1,11 @@
-# StatusMod
+# Status Player
 
-StatusMod adds lightweight status tags for players on Minecraft servers and clients.
+Status Player adds lightweight status tags for players on Minecraft servers and clients.
 Players can set a custom status text and color that is shown in the player list (TAB) and above their name.
 
 ## Highlights
 
-- `/status <text> [color]` to set your status quickly
+- `/status <text> [color] [duration]` to set your status quickly (`30m`, `2h`, `1d`)
 - `/status clear` to remove your status
 - `/status preset <name>`, `/status timed <minutes> <status>`, `/status random <status>`
 - `/status world <status>` per-dimension override
@@ -13,16 +13,17 @@ Players can set a custom status text and color that is shown in the player list 
 - Color support for English and German names, plus hex (`#RRGGBB` / `#RGB`)
 - Placeholders: `{world}`, `{ping}`
 - Your status is saved and restored automatically when you rejoin
-- Admin tools for moderation (`/block`, `/unblock`, `/status admin ...`)
+- Timed statuses revert automatically, even after a server restart
+- Admin tools for moderation (`/block`, `/unblock`, `/ignore`, `/unignore`, `/status admin ...`)
 
 ## Commands
 
-- `/status <text> [color]`
+- `/status <text> [color] [duration]`
 - `/status clear`
 - `/status preset <name>`
 - `/status timed <minutes> <status>`
 - `/status random <status>`
-- `/status world <status> [color>`
+- `/status world <status> [color]`
 - `/status world clear`
 - `/status history`
 - `/color <name|hex|reset>`
@@ -31,8 +32,8 @@ Players can set a custom status text and color that is shown in the player list 
 - `/settings words <number>`
 - `/status admin set <player> <status> [color]` (if enabled in config)
 - `/status admin clear <player>` (if enabled in config)
-- `/block <player>`
-- `/unblock <player>`
+- `/block <player>` / `/unblock <player>`
+- `/ignore <player> [duration]` / `/unignore <player>` (temporary block)
 - `/status config show`
 - `/status config reload`
 - `/modinfo`
@@ -41,9 +42,11 @@ Players can set a custom status text and color that is shown in the player list 
 
 - `/status AFK red`
 - `/status Workshop #ffaa00`
+- `/status Bauen 2h`
 - `/status Busy`
 - `/settings words 2`
 - `/status Not Disturb orange` (with `words=2`, status = `Not Disturb`, color = `orange`)
+- `/ignore Griefer 1d`
 
 ## Installation
 
@@ -57,10 +60,12 @@ Players can set a custom status text and color that is shown in the player list 
 
 | Loader | Minecraft versions |
 |--------|-------------------|
-| Fabric | 1.19 - 1.21.11, 26.1 - 26.2 |
-| Forge | 1.19 - 25.x, 26.1 - 26.2 |
-| NeoForge | 1.21+ |
-| Quilt | 1.21.11, 26.1 - 26.2 |
+| Fabric | 1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, 26.3 |
+| Forge | 1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, 26.3 |
+| NeoForge | 1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, 26.3 |
+| Quilt | 1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, 26.3 |
+
+That is 24 builds (4 loaders × 6 Minecraft versions).
 
 ## Configuration
 
@@ -70,13 +75,15 @@ Changes apply with `/status config reload` — no restart needed.
 
 ## Privacy
 
-By default the mod works fully local: no external connections, no telemetry.
-Only minimal data is stored on your own server (name + status + settings).
+Without a dashboard connection the mod works fully local: no external
+connections, no telemetry. Data stays on your own server
+(`config/statusmod/`: player UUID, name, status text and color, settings).
 
-Optional: connect your own status dashboard (opt-in in `config.json`).
-While enabled, the mod exchanges status data with your dashboard so you can
-manage players from the web. Disable anytime by clearing the dashboard values
-in the config.
+Optional: connect your own dashboard (opt-in in `config.json`). While enabled,
+the mod syncs player UUID, name, online presence, status text and color,
+settings, mute state and block list to the dashboard URL you configured, so
+you can manage players from the web. Disable anytime by clearing the dashboard
+values in the config.
 
 ## Links
 
@@ -85,7 +92,18 @@ in the config.
 
 ## License
 
-MIT License. See `LICENSE`.
+**Status Player License 1.0** from version 1.4.2 on. See `LICENSE`.
+
+In short: use it on your own servers (also monetized ones) and modify it for
+private use — that is fine. Redistributing it under a different name, or
+publishing a modified version as your own mod, is not.
+
+Exception: if this project has had no release for at least twelve months, you
+may publish a continuation — including under your own name — as long as it
+states that it is based on Status Player and links back here.
+
+Versions up to and including 1.4.1 were published under the MIT License and
+stay under it; the old text is kept in `LICENSE-MIT-legacy.txt`.
 
 ---
 

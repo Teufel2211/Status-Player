@@ -3,14 +3,14 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 
 export const metadata: Metadata = {
-  title: "StatusMod Dashboard",
-  description: "Manage your Minecraft server status and players",
+  title: "Status Player Dashboard",
+  description: "Verwalte Status und Spieler deines Minecraft-Servers",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
-      <body className="min-h-screen bg-grid">
+    <html lang="de" className="dark" suppressHydrationWarning>
+      <body className="min-h-screen">
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

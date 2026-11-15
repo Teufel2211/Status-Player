@@ -1,17 +1,24 @@
-import { ok, serverError, unauthorized, badRequest } from "@/lib/response"
+import { ok, serverError, unauthorized, badRequest, forbidden, tooMany } from "@/lib/response"
 import { getServiceClient } from "@/lib/supabase"
 import { requireApiKey } from "@/lib/auth"
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { validatePathUuid } from "@/lib/validators"
+import { evaluateSyncCode, SYNC_CODE_SELECT, type SyncCodeServerRow } from "@/lib/sync-code"
+import { attestGate, clearAttest, recordAttest, verifyAttest } from "@/lib/attest"
 import { z } from "zod"
 
 const PlayerSyncSchema = z.object({
   uuid: z.string().min(1).max(64),
   username: z.string().max(32).optional().nullable(),
-  status: z.string().max(64).optional().nullable(),
+  // Der Mod begrenzt auf 64 Code Points (SyncManager.MAX_STATUS_LENGTH),
+  // Zod zaehlt UTF-16-Code-Units. 64 Emoji = 128 Units -> max(256) verhindert,
+  // dass ein gueltiger Status den kompletten Push-Zyklus mit 400 abbricht.
+  status: z.string().max(256).optional().nullable(),
   color: z.string().max(32).optional().nullable(),
   settings: z.record(z.unknown()).optional().nullable(),
   avatar: z.string().max(160).optional().nullable(),
   online: z.boolean().optional(),
+  status_expires_at: z.number().int().nonnegative().max(8640000000000000).optional(),
 })
 
 const MutedSyncSchema = z.object({
@@ -23,6 +30,8 @@ const MutedSyncSchema = z.object({
 const BlockedSyncSchema = z.object({
   uuid: z.string().min(1).max(64),
   active: z.boolean().optional().default(true),
+  // 0 = permanent, >0 = automatische Rueckkehr zu diesem Zeitpunkt (ms).
+  expires_at: z.number().int().nonnegative().max(8640000000000000).optional(),
 })
 
 const SyncBodySchema = z.object({
@@ -40,23 +49,76 @@ export async function POST(
 ) {
   if (!validatePathUuid(params.server_id)) return badRequest()
 
+  // Rate-Limit vor dem Argon2id-Key-Verify: ein Fluten mit beliebigen
+  // x-api-key-Headern waere sonst CPU-DoS (verify iteriert alle Keys).
+  const syncRate = checkRateLimit(`sync-post:${params.server_id}`, RATE_LIMITS.SYNC)
+  if (!syncRate.allowed) return tooMany()
+
   const authed = await requireApiKey(request, "check", params.server_id)
   if (!authed) return unauthorized()
+
+  const sb = getServiceClient()
+
+  const { data: serverRow, error: flagError } = await (sb as any)
+    .from("servers")
+    .select(
+      `${SYNC_CODE_SELECT}, mod_enabled, allow_dev_builds, attest_build_id, attest_key_id`
+    )
+    .eq("id", params.server_id)
+    .maybeSingle()
+  if (flagError) return serverError()
+  if (!serverRow) return badRequest()
+
+  // Sync-Code: wird vollstaendig intern ausgehandelt (siehe lib/sync-code.ts).
+  // 403 ist eindeutig Sync-Code (requireApiKey liefert 401).
+  const gate = await evaluateSyncCode(
+    sb,
+    serverRow as SyncCodeServerRow,
+    request.headers.get("x-sync-code")
+  )
+  if (!gate.allowed) return forbidden("sync_not_confirmed")
+  const setupField = gate.setupCode ? { sync_code_setup: gate.setupCode } : {}
+
+  // Kill-Switch: Schreibvorgaenge still verwerfen, solange der Server (oder
+  // die ganze Flotte) im Admin-Dashboard deaktiviert ist. 200 statt Fehler,
+  // damit ein Mod, der das Flag noch nicht geholt hat, nicht Logs spammt.
+  const { data: fleetRow } = await (sb as any)
+    .from("fleet_config")
+    .select("mod_enabled")
+    .eq("id", 1)
+    .maybeSingle()
+  if (serverRow.mod_enabled === false || fleetRow?.mod_enabled === false) {
+    const mod_disabled_scope = fleetRow?.mod_enabled === false ? "global" : "server"
+    return ok({ synced: 0, mod_enabled: false, mod_disabled_scope, ...setupField })
+  }
+
+  // Build-Attest (siehe lib/attest.ts): nur Builds, deren Manifest von unserem
+  // Release-Key signiert wurde, duerfen schreiben. 403 attest_required /
+  // attest_invalid => der Mod pausiert (kein Repair, kein Datenverlust).
+  const attest = attestGate(
+    await verifyAttest(sb, request),
+    serverRow.allow_dev_builds === true
+  )
+  if (!attest.allowed) return forbidden(attest.error)
+  if (attest.fields) {
+    // Nur schreiben, wenn Build oder Key neu ist: sonst erzeugt jeder
+    // 30-Sekunden-Sync ein UPDATE auf servers.
+    if (
+      serverRow.attest_build_id !== attest.fields.build_id ||
+      serverRow.attest_key_id !== attest.fields.key_id
+    ) {
+      await recordAttest(sb, params.server_id, attest.fields)
+    }
+  } else if (serverRow.attest_build_id) {
+    // Dev-Build nach erlaubtem Toggle: letzter verifizierter Build ist weg.
+    await clearAttest(sb, params.server_id)
+  }
 
   let body: unknown
   try { body = await request.json() } catch { return badRequest() }
 
   const parsed = SyncBodySchema.safeParse(body)
   if (!parsed.success) return badRequest()
-
-  const sb = getServiceClient()
-
-  const { data: serverExists } = await (sb as any)
-    .from("servers")
-    .select("id")
-    .eq("id", params.server_id)
-    .maybeSingle()
-  if (!serverExists) return badRequest()
 
   const nowIso = new Date().toISOString()
   const rows = parsed.data.players.map((p) => {
@@ -74,6 +136,10 @@ export async function POST(
     if (p.color != null) row.color = p.color
     if (p.settings != null) row.settings = p.settings
     if (p.avatar !== undefined && p.avatar !== null) row.avatar = p.avatar === "" ? null : p.avatar
+    if (p.status_expires_at !== undefined) {
+      row.status_expires_at =
+        p.status_expires_at > 0 ? new Date(p.status_expires_at).toISOString() : null
+    }
     return row
   })
 
@@ -114,7 +180,8 @@ export async function POST(
     .map((b) => ({
       uuid: b.uuid,
       server_id: params.server_id,
-      blocked_at: new Date().toISOString(),
+      expires_at:
+        b.expires_at && b.expires_at > 0 ? new Date(b.expires_at).toISOString() : null,
     }))
   const blockedDelete = parsed.data.blocked.filter((b) => b.active === false)
 
@@ -134,7 +201,7 @@ export async function POST(
     if (error) return serverError()
   }
 
-  return ok({ synced: rows.length + mutedRows.length + blockedRows.length })
+  return ok({ synced: rows.length + mutedRows.length + blockedRows.length, ...setupField })
 }
 
 export async function GET(
@@ -142,6 +209,10 @@ export async function GET(
   { params }: { params: { server_id: string } }
 ) {
   if (!validatePathUuid(params.server_id)) return badRequest()
+
+  // Gleiches Muster wie POST: Limit vor dem Argon2id-Key-Verify.
+  const syncRate = checkRateLimit(`sync-get:${params.server_id}`, RATE_LIMITS.SYNC)
+  if (!syncRate.allowed) return tooMany()
 
   const authed = await requireApiKey(request, "check", params.server_id)
   if (!authed) return unauthorized()
@@ -152,9 +223,59 @@ export async function GET(
 
   const sb = getServiceClient()
 
+  const { data: serverRow, error: flagError } = await (sb as any)
+    .from("servers")
+    .select(`${SYNC_CODE_SELECT}, mod_enabled, allow_dev_builds, attest_build_id, attest_key_id`)
+    .eq("id", params.server_id)
+    .maybeSingle()
+  if (flagError) return serverError()
+  if (!serverRow) return badRequest()
+
+  // Sync-Code (siehe lib/sync-code.ts). Ohne Code stellt das Dashboard hier
+  // einmalig einen aus und liefert ihn in der Antwort mit; der Mod uebernimmt
+  // ihn selbst. Kein Admin-Eingriff noetig.
+  const gate = await evaluateSyncCode(
+    sb,
+    serverRow as SyncCodeServerRow,
+    request.headers.get("x-sync-code")
+  )
+  if (!gate.allowed) return forbidden("sync_not_confirmed")
+  const setupField = gate.setupCode ? { sync_code_setup: gate.setupCode } : {}
+
+  const { data: fleetRow } = await (sb as any)
+    .from("fleet_config")
+    .select("mod_enabled")
+    .eq("id", 1)
+    .maybeSingle()
+  if (serverRow.mod_enabled === false || fleetRow?.mod_enabled === false) {
+    // Nur das Flag liefern: der Mod ueberspringt die Datenverarbeitung und
+    // laesst den Watermark stehen, damit Re-Enable den Rueckstand nachzieht.
+    const mod_disabled_scope = fleetRow?.mod_enabled === false ? "global" : "server"
+    return ok({ mod_enabled: false, mod_disabled_scope, server_time: new Date().toISOString(), ...setupField })
+  }
+
+  // Build-Attest: gleicher Vertrag wie im POST (siehe lib/attest.ts). Auch der
+  // Pull liefert Daten, deshalb gilt hier dieselbe Pruefung.
+  const attest = attestGate(
+    await verifyAttest(sb, request),
+    serverRow.allow_dev_builds === true
+  )
+  if (!attest.allowed) return forbidden(attest.error)
+  if (attest.fields) {
+    // Siehe POST: nur bei neuem Build/Key schreiben, nicht bei jedem Poll.
+    if (
+      serverRow.attest_build_id !== attest.fields.build_id ||
+      serverRow.attest_key_id !== attest.fields.key_id
+    ) {
+      await recordAttest(sb, params.server_id, attest.fields)
+    }
+  } else if (serverRow.attest_build_id) {
+    await clearAttest(sb, params.server_id)
+  }
+
   let playerQuery = (sb as any)
     .from("players")
-    .select("uuid, username, status, color, settings, updated_at")
+    .select("uuid, username, status, color, settings, updated_at, status_expires_at, slowmode_seconds, is_online")
     .eq("server_id", params.server_id)
   if (since) playerQuery = playerQuery.gte("updated_at", since)
   const { data: players, error: playerError } = await playerQuery
@@ -169,24 +290,70 @@ export async function GET(
 
   let blockQuery = (sb as any)
     .from("blocked_players")
-    .select("uuid")
+    .select("uuid, expires_at")
     .eq("server_id", params.server_id)
   const { data: blocked, error: blockError } = await blockQuery
   if (blockError) return serverError()
+
+  // Aktive Warnungen (abgelaufen/zurueckgenommen zaehlen nicht).
+  const nowIso = new Date().toISOString()
+  const { data: warnings, error: warnError } = await (sb as any)
+    .from("player_warnings")
+    .select("player_uuid, created_at, expires_at")
+    .eq("server_id", params.server_id)
+    .is("revoked_at", null)
+    .gt("expires_at", nowIso)
+
+  if (warnError) return serverError()
+
+  const warnByPlayer = new Map<string, { count: number; updated_at: string }>()
+  for (const w of warnings ?? []) {
+    const uuid = w.player_uuid as string
+    if (!uuid) continue
+    const prev = warnByPlayer.get(uuid)
+    const created = (w.created_at as string) ?? nowIso
+    if (!prev) {
+      warnByPlayer.set(uuid, { count: 1, updated_at: created })
+    } else {
+      prev.count += 1
+      if (created > prev.updated_at) prev.updated_at = created
+    }
+  }
+  const warningRows = Array.from(warnByPlayer.entries()).map(([uuid, v]) => ({
+    uuid,
+    count: v.count,
+    level: Math.min(3, v.count),
+    updated_at: v.updated_at,
+  }))
+
+  const { data: presets, error: presetError } = await (sb as any)
+    .from("custom_presets")
+    .select("name, status, color, updated_at")
+    .eq("server_id", params.server_id)
+    .order("name", { ascending: true })
+
+  if (presetError) return serverError()
 
   let adminQuery = (sb as any)
     .from("audit_log")
     .select("id, action, who_uuid_hash, target_uuid_hash, detail, created_at")
     .eq("server_id", params.server_id)
+    // Neueste zuerst: ohne Order waere unbestimmt, welche 200 Eintraege
+    // bei mehr als 200 neuen Admin-Aktionen fehlen.
+    .order("created_at", { ascending: false })
     .limit(200)
   if (since) adminQuery = adminQuery.gte("created_at", since)
   const { data: adminActions, error: adminError } = await adminQuery
   if (adminError) return serverError()
 
   return ok({
+    mod_enabled: true,
+    ...setupField,
     players: players ?? [],
     muted: muted ?? [],
     blocked: blocked ?? [],
+    warnings: warningRows,
+    presets: presets ?? [],
     admin_actions: adminActions ?? [],
     server_time: new Date().toISOString(),
   })

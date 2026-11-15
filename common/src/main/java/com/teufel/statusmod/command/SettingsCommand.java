@@ -20,6 +20,7 @@ import net.minecraft.server.level.ServerPlayer;
 public class SettingsCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("settings")
+            .requires(ctx -> !StatusMod.isRemoteDisabled())
             .then(Commands.literal("brackets").then(Commands.argument("value", StringArgumentType.word()).suggests((ctx, builder) -> SharedSuggestionProvider.suggest(new String[]{"off","square","angle"}, builder)).executes(ctx -> { setBrackets(ctx.getSource(), ctx.getSource().getPlayer(), parseBracketStyle(StringArgumentType.getString(ctx, "value"))); return 1; })))
             .then(Commands.literal("position").then(Commands.argument("value", StringArgumentType.word()).suggests((ctx, builder) -> SharedSuggestionProvider.suggest(new String[]{"before","after"}, builder)).executes(ctx -> { setPosition(ctx.getSource(), ctx.getSource().getPlayer(), isBefore(StringArgumentType.getString(ctx, "value"))); return 1; })))
             .then(Commands.literal("words").then(Commands.argument("value", IntegerArgumentType.integer(1, 10)).executes(ctx -> { setWords(ctx.getSource(), ctx.getSource().getPlayer(), IntegerArgumentType.getInteger(ctx, "value")); return 1; })))

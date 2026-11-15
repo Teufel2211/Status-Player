@@ -108,9 +108,58 @@ jobs:
         shell: pwsh
         run: Get-Content dist/multiversion/build-report.md -Raw | Write-Host
 
+      # A4: Release-JARs werden vor Verify/Runtime/Publish obfuskiert. Die CI baut
+      # aus dem Quellcode; ohne diesen Schritt wuerden unobfuskierte JARs
+      # veroeffentlicht. Die Backup-Kopie liegt ausserhalb von dist, damit sie
+      # beim naechsten Lauf nicht als zusaetzliches Release-JAR zaehlt.
+      - name: Fetch ProGuard toolchain
+        shell: pwsh
+        run: .\scripts\ci\fetch-proguard.ps1 -TargetDir "$env:RUNNER_TEMP\proguard"
+
+      - name: Obfuscate release JARs (A4)
+        shell: pwsh
+        run: |
+          $pg = "$env:RUNNER_TEMP\proguard"
+          .\scripts\local\obfuscate-release.ps1 `
+            -InputDir dist/multiversion `
+            -BackupDir "$env:RUNNER_TEMP\a4-backup" `
+            -ProguardJar "$pg\proguard-base-7.10.0.jar" `
+            -ProguardCoreJar "$pg\proguard-core-9.4.0.jar" `
+            -ProguardDependencyDir $pg `
+            -AsmDir "$pg\asm"
+
+      # Echtheitsnachweis: jedes Release-JAR bekommt ein signiertes Manifest
+      # (Ed25519). Muss NACH dem Obfuskieren laufen (die Hashes decken den
+      # ausgelieferten Bytecode ab) und VOR verify-jars.ps1 (das prueft die
+      # Signatur mit). Der Private Key liegt nur im GitHub-Secret.
+      - name: Setup Node (attest)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Sign release JARs (attest)
+        shell: pwsh
+        env:
+          STATUSMOD_ATTEST_KEY: ${{ secrets.STATUSMOD_ATTEST_KEY }}
+        run: |
+          if (-not $env:STATUSMOD_ATTEST_KEY) { throw "STATUSMOD_ATTEST_KEY secret is not set" }
+          node scripts/ci/sign-build.mjs --dir dist/multiversion
+
       - name: Verify JARs
         shell: pwsh
-        run: .\scripts\ci\verify-jars.ps1
+        run: .\scripts\ci\verify-jars.ps1 -RequireAttest
+
+      # Release-Gate: jedes signierte JAR muss in der Registry stehen, bevor es
+      # hochgeladen/veroeffentlicht wird. Scheitert der Schritt, bricht der Job
+      # ab - ein Build, dessen ID der Mod beim Start nicht findet, wird so nie
+      # veroeffentlicht. Idempotent: ein erneuter Lauf ueberschreibt die Zeile.
+      - name: Register builds (Supabase)
+        shell: pwsh
+        env:
+          STATUSMOD_BUILD_TOKEN: ${{ secrets.STATUSMOD_BUILD_TOKEN }}
+        run: |
+          if (-not $env:STATUSMOD_BUILD_TOKEN) { throw "STATUSMOD_BUILD_TOKEN secret is not set" }
+          node scripts/ci/register-builds.mjs --dir dist/multiversion
 
       - name: Upload JARs
         uses: actions/upload-artifact@v5
@@ -244,7 +293,7 @@ jobs:
           if (Test-Path -LiteralPath "CHANGELOG.md") {
             $clText = Get-Content -LiteralPath "CHANGELOG.md" -Raw
             $cm = [regex]::Match($clText, "(?ms)^## " + [regex]::Escape($ver) + "\b.*?\r?\n([\s\S]*?)(?=^## |\z)")
-            if ($cm.Success) { $changelog = "# StatusMod $ver`n`n" + $cm.Groups[1].Value.Trim() + "`n" }
+            if ($cm.Success) { $changelog = "# Status Player $ver`n`n" + $cm.Groups[1].Value.Trim() + "`n" }
           }
           if ([string]::IsNullOrWhiteSpace($changelog)) {
             $changelog = if ($lastTag) {
@@ -262,16 +311,27 @@ jobs:
           if ($tagExists) {
             Write-Host "Tag $tag exists — deleting to recreate"
             git tag -d $tag
+            if ($LASTEXITCODE -ne 0) { throw "git tag -d $tag failed" }
           }
-
-          git tag $tag
-          git push origin $tag
 
           gh release view $tag 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Release $tag exists — deleting to recreate"
             gh release delete $tag --yes
+            if ($LASTEXITCODE -ne 0) { throw "gh release delete $tag failed" }
           }
+
+          # Remote-Tag ebenfalls loeschen: bei einem Re-Publish (force_publish)
+          # zeigt er sonst auf einen anderen Commit und `git push origin $tag`
+          # wird als non-fast-forward abgelehnt. Ein nicht vorhandener
+          # Remote-Tag ist kein Fehler.
+          git push origin ":refs/tags/$tag" 2>$null
+          Write-Host "Remote tag $tag cleared (if it existed)"
+
+          git tag $tag
+          if ($LASTEXITCODE -ne 0) { throw "git tag $tag failed" }
+          git push origin $tag
+          if ($LASTEXITCODE -ne 0) { throw "git push origin $tag failed" }
           # Dateien explizit aufzählen: ** wird an native Befehle nicht
           # rekursiv expandiert (fabric-JARs liegen eine Ebene tiefer).
           $assetFiles = @(Get-ChildItem -Path dist/multiversion -Recurse -Filter *.jar -File | ForEach-Object { $_.FullName })
@@ -283,6 +343,7 @@ jobs:
             "$h  $(Split-Path $_ -Leaf)"
           } | Set-Content -LiteralPath $sumsFile
           gh release create $tag `
-            --title "StatusMod $ver" `
+            --title "Status Player $ver" `
             --notes-file $changelogFile `
             $assetFiles $sumsFile
+          if ($LASTEXITCODE -ne 0) { throw "gh release create $tag failed" }

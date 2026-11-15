@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const sb = getServiceClient()
   const { data, error } = await (sb as any)
     .from("dashboard_users")
-    .select("uuid, username, role, server_id, totp_enabled")
+    .select("uuid, username, role, server_id, totp_enabled, is_fleet_admin")
     .eq("uuid", session.sub)
     .maybeSingle()
 
@@ -24,5 +24,7 @@ export async function GET(request: Request) {
     role: data.role,
     server_id: data.server_id,
     totp_enabled: data.totp_enabled,
+    // Darf unbekannte Mod-Builds freischalten (Release-Gate).
+    is_fleet_admin: data.is_fleet_admin === true,
   })
 }

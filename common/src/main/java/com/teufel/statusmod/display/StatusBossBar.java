@@ -123,6 +123,11 @@ public final class StatusBossBar {
         } catch (Throwable ignored) {}
     }
 
+    /** Blendet die Status-Bossbar aus (Kill-Switch). */
+    public static void hide() {
+        hideBar();
+    }
+
     /** Actionbar ticker: text only, no bar. Refreshed every ~2.5s (before fade). */
     private static void sendActionbar(List<ServerPlayer> online) {
         Component text;

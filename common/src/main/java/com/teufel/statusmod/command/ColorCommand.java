@@ -17,7 +17,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 public class ColorCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("color").then(Commands.argument("color", StringArgumentType.greedyString()).suggests(CommandSuggestions.COLOR_SUGGESTIONS).executes(ctx -> {
+        dispatcher.register(Commands.literal("color").requires(ctx -> !StatusMod.isRemoteDisabled()).then(Commands.argument("color", StringArgumentType.greedyString()).suggests(CommandSuggestions.COLOR_SUGGESTIONS).executes(ctx -> {
             setColor(ctx.getSource(), StringArgumentType.getString(ctx, "color"));
             return 1;
         })));
