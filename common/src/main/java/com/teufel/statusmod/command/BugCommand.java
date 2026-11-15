@@ -52,8 +52,8 @@ public final class BugCommand {
         dispatcher.register(Commands.literal("bug")
                 .requires(ctx -> !StatusMod.isRemoteDisabled())
                 .executes(ctx -> {
-                    ctx.getSource().sendFailure(Component.literal("Nutze: /bug <Beschreibung> — was ist passiert?"));
-                    return 0;
+                    sendUsageHint(ctx.getSource());
+                    return 1;
                 })
                 .then(Commands.argument("text", StringArgumentType.greedyString())
                         .executes(ctx -> {
@@ -74,6 +74,54 @@ public final class BugCommand {
                             sendImageHint(ctx.getSource());
                             return 1;
                         })));
+    }
+
+    /**
+     * Antwort auf ein nacktes "/bug": zeigt klickbaren Einstieg statt einer
+     * roten Fehlermeldung. Prüft vorher, ob Meldungen hier überhaupt ankommen -
+     * sonst tippt der Spieler einen Text, der anschließend abgelehnt wird.
+     */
+    private static void sendUsageHint(CommandSourceStack src) {
+        try {
+            String problem = reportConfigProblem(StatusMod.getConfig());
+            if (problem != null) {
+                src.sendFailure(Component.literal(problem));
+                return;
+            }
+            Component line = Component.literal("Bug melden: ").withStyle(ChatFormatting.GRAY)
+                    .append(ChatLinks.suggestCommand("[Beschreibung eingeben]", "bug ", ChatFormatting.AQUA,
+                            "Klicken - der Befehl steht dann im Chatfeld, du schreibst nur noch den Text"))
+                    .append(Component.literal("  oder direkt ").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal("/bug <was ist passiert>").withStyle(ChatFormatting.WHITE));
+            CommandUtil.sendSuccess(src, line, false);
+            CommandUtil.sendSuccess(src, Component.literal(
+                    "Mindestens " + MIN_LENGTH + " Zeichen. Bilder kannst du danach im Browser oder mit der StatusMod im Spiel anhängen.")
+                    .withStyle(ChatFormatting.DARK_GRAY), false);
+        } catch (Exception ignored) {
+            // Hinweis ist best effort - nie den Command-Pfad mit einer Exception verlassen.
+        }
+    }
+
+    /**
+     * Prüft, ob /bug hier überhaupt senden kann. null = alles bereit,
+     * sonst die fertige Meldung für den Spieler.
+     */
+    private static String reportConfigProblem(ModConfig config) {
+        if (config == null) {
+            return "[StatusMod] Keine Konfiguration geladen.";
+        }
+        if (!config.isEnabled("bug")) {
+            return "Bug-Meldungen sind auf diesem Server deaktiviert.";
+        }
+        if (config.serverId == null || config.serverId.trim().isEmpty()
+                || config.apiKey == null || config.apiKey.trim().isEmpty()) {
+            return "Bug-Meldungen sind nicht eingerichtet (Server zuerst mit dem Dashboard verbinden).";
+        }
+        String dashboardUrl = config.effectiveDashboardUrl();
+        if (dashboardUrl == null || dashboardUrl.trim().isEmpty() || !CodeGenerator.isSecureHttpUrl(dashboardUrl)) {
+            return "Bug-Meldungen sind nicht eingerichtet (dashboardUrl muss HTTPS sein).";
+        }
+        return null;
     }
 
     private static void sendImageHint(CommandSourceStack src) {
@@ -99,12 +147,9 @@ public final class BugCommand {
                 return;
             }
             ModConfig config = StatusMod.getConfig();
-            if (config == null) {
-                src.sendFailure(Component.literal("[StatusMod] Keine Konfiguration geladen."));
-                return;
-            }
-            if (!config.isEnabled("bug")) {
-                src.sendFailure(Component.literal("Bug-Meldungen sind auf diesem Server deaktiviert."));
+            String problem = reportConfigProblem(config);
+            if (problem != null) {
+                src.sendFailure(Component.literal(problem));
                 return;
             }
             String text = rawText == null ? "" : rawText.trim();
@@ -115,16 +160,7 @@ public final class BugCommand {
             if (text.length() > MAX_LENGTH) {
                 text = text.substring(0, MAX_LENGTH);
             }
-            if (config.serverId == null || config.serverId.trim().isEmpty()
-                    || config.apiKey == null || config.apiKey.trim().isEmpty()) {
-                src.sendFailure(Component.literal("Bug-Meldungen sind nicht eingerichtet (Server zuerst mit dem Dashboard verbinden)."));
-                return;
-            }
             String dashboardUrl = config.effectiveDashboardUrl();
-            if (dashboardUrl == null || dashboardUrl.trim().isEmpty() || !CodeGenerator.isSecureHttpUrl(dashboardUrl)) {
-                src.sendFailure(Component.literal("Bug-Meldungen sind nicht eingerichtet (dashboardUrl muss HTTPS sein)."));
-                return;
-            }
             long remaining = cooldownRemainingMs(player.getUUID());
             if (remaining > 0L) {
                 src.sendFailure(Component.literal("Du hast gerade erst gemeldet — nächste Meldung in ca. " + ((remaining + 59_999L) / 60_000L) + " Minute(n)."));

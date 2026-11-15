@@ -85,6 +85,11 @@ settings, mute state and block list to the dashboard URL you configured, so
 you can manage players from the web. Disable anytime by clearing the dashboard
 values in the config.
 
+With a dashboard configured, the mod also reports its own build fingerprint
+once per start (`build_id` plus the two content hashes, no player data) so the
+dashboard can tell official releases from modified copies. Nothing else is
+sent.
+
 ## Links
 
 - Source: https://github.com/Teufel2211/Status-Player
