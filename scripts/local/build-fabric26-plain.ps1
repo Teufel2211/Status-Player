@@ -211,6 +211,28 @@ if ((-not (Test-FileExists $mcJar)) -or (-not (Test-MojangNamedJar $mcJar))) {
 Write-Host "MC: $mcJar"
 $cpJars += $mcJar
 
+# Client-JAR: das Server-JAR enthaelt keine Client-Klassen (net.minecraft.client.*,
+# com.mojang.blaze3d.*). Die common/fabric-Quellen enthalten aber Client-Code
+# (StatusMenuKeybind, ClientRuntime, StatusModFabricClient). Nur MC 26.x liefert
+# ein Mojang-benanntes Client-JAR (keine Obfuskation) - dieser Pfad wird nur fuer
+# 26.x benutzt. Server-JAR bleibt zuerst auf dem Classpath (gleiche Klassen),
+# das Client-JAR ergaenzt die Client-Klassen.
+$mcClientJar = Join-Path $libDir "minecraft-client-$McVersion.jar"
+if (-not (Test-FileExists $mcClientJar)) {
+    if ([string]::IsNullOrWhiteSpace($pkg.downloads.client.url)) { throw "MC ${McVersion}: Version-JSON ohne Client-Download" }
+    Write-Host "Downloading vanilla client $McVersion ..."
+    Invoke-DownloadWithRetry $pkg.downloads.client.url $mcClientJar 600
+}
+$ziClient = [System.IO.Compression.ZipFile]::OpenRead($mcClientJar)
+try {
+    $hasClient = (@($ziClient.Entries | Where-Object { $_.FullName -eq "net/minecraft/client/Minecraft.class" }).Count -gt 0)
+} finally {
+    $ziClient.Dispose()
+}
+if (-not $hasClient) { throw "Client-JAR $McVersion ist nicht Mojang-benannt (net/minecraft/client/Minecraft.class fehlt)" }
+$cpJars += $mcClientJar
+Write-Host "MC client: $mcClientJar"
+
 # 2. FAPI modules from the bundle POM (exact versions for this FAPI release).
 # Hinweis: POM + Module IMMER frisch von Maven (kein Gradle-Cache) — alte
 # Cache-Staende enthalten intermediary-benannte Module, frische sind Mojang-benannt.
