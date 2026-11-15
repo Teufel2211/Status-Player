@@ -192,6 +192,27 @@ if ((-not (Test-FileExists $mcJar)) -or (-not (Test-MojangNamedJar $mcJar))) {
 Write-Host "MC: $mcJar"
 $cpJars += $mcJar
 
+# Client-JAR: das Server-JAR enthaelt keine Client-Klassen (net.minecraft.client.*,
+# com.mojang.blaze3d.*). Die common-Quellen enthalten aber Client-Code
+# (StatusMenuKeybind, ClientRuntime). Nur MC 26.x liefert ein Mojang-benanntes
+# Client-JAR (keine Obfuskation) - dieser Pfad wird nur fuer 26.x benutzt.
+# Server-JAR bleibt zuerst auf dem Classpath, das Client-JAR ergaenzt nur.
+$mcClientJar = Join-Path $libDir "minecraft-client-$McVersion.jar"
+if (-not (Test-FileExists $mcClientJar)) {
+    if ([string]::IsNullOrWhiteSpace($pkg.downloads.client.url)) { throw "MC ${McVersion}: Version-JSON ohne Client-Download" }
+    Write-Host "Downloading vanilla client $McVersion ..."
+    Invoke-DownloadWithRetry $pkg.downloads.client.url $mcClientJar 600
+}
+$ziClient = [System.IO.Compression.ZipFile]::OpenRead($mcClientJar)
+try {
+    $hasClient = (@($ziClient.Entries | Where-Object { $_.FullName -eq "net/minecraft/client/Minecraft.class" }).Count -gt 0)
+} finally {
+    $ziClient.Dispose()
+}
+if (-not $hasClient) { throw "Client-JAR $McVersion ist nicht Mojang-benannt (net/minecraft/client/Minecraft.class fehlt)" }
+$cpJars += $mcClientJar
+Write-Host "MC client: $mcClientJar"
+
 # 2. NeoForge universal jar (Mojang-named for 26.x).
 $NeoMap = @{
     "26.1"   = "26.1.0.19-beta"
@@ -222,6 +243,15 @@ if (-not (Test-FileExists $fmlJar)) {
     Invoke-DownloadWithRetry "https://maven.neoforged.net/releases/net/neoforged/fancymodloader/loader/11.0.16/loader-11.0.16.jar" $fmlJar 300
 }
 $cpJars += $fmlJar
+# Distmarker-API (net.neoforged.api.distmarker.Dist) liegt in KEINEM der Laufzeit-Jars
+# (weder universal noch fml-loader). NeoForge nutzt dafuer das mergetool-*-api.jar
+# (enthalt nur Annotationen/Enums, compile-only). Ohne dieses Jar scheitert der
+# NeoForge-Plain-Build an StatusModNeoForgeClient (import ...Dist).
+$distJar = Join-Path $libDir "mergetool-2.0.0-api.jar"
+if (-not (Test-FileExists $distJar)) {
+    Invoke-DownloadWithRetry "https://maven.neoforged.net/releases/net/neoforged/mergetool/2.0.0/mergetool-2.0.0-api.jar" $distJar 300
+}
+$cpJars += $distJar
 
 # 3. Vanilla libs.
 $pins = $null
