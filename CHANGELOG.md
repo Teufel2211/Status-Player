@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Added
+
+- Dashboard circuit breaker: if five dashboard pings in a row fail (network errors or 5xx), only the dashboard sync switches off - status, commands and all local files keep working unchanged. Admins see "Dashboard aktuell nicht erreichbar" in chat and in the console, `/modinfo` shows the pause, and admins joining during the outage get a short hint. After 10 minutes the mod sends exactly one probe ping; if the dashboard still does not answer the pause grows to 20 and then 30 minutes, and the sync resumes automatically as soon as it answers again.
+
+### Changed
+
+- `/bug` and `/bugbild` now also work when Status Player is switched off on the server or refuses to start (tampered or unknown build) - a broken or disabled mod is exactly when a report is needed. The dashboard accepts bug reports from disabled servers again; the rate limits (per server and per player) still apply.
+
 ### Improved
 
 - `/bug` without text is no longer a dead end: it shows a clickable "Beschreibung eingeben" button that puts `/bug ` into the chat field, and it says up front when bug reports are not set up on the server instead of asking for a text that would be rejected.

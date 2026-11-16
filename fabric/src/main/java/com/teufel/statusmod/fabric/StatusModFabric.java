@@ -25,13 +25,14 @@ public final class StatusModFabric implements ModInitializer {
         boolean refused = StatusMod.isRefused();
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             ModInfoCommand.register(dispatcher);
+            // /bug + /bugbild bleiben auch bei refused erreichbar (Support-Kanal).
+            BugCommand.register(dispatcher);
             if (refused) return;
             StatusCommand.register(dispatcher);
             SettingsCommand.register(dispatcher);
             BlockCommand.register(dispatcher);
             ColorCommand.register(dispatcher);
             CodeCommand.register(dispatcher);
-            BugCommand.register(dispatcher);
         });
         if (refused) return;
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> StatusLifecycle.onPlayerJoin(server, handler.getPlayer()));

@@ -49,8 +49,10 @@ public final class BugCommand {
     private BugCommand() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        // /bug und /bugbild haben bewusst KEIN requires(!isRemoteDisabled()):
+        // ein abgeschalteter Server oder ein Mod, der nicht startet, ist genau
+        // der Fall, in dem eine Meldung gebraucht wird.
         dispatcher.register(Commands.literal("bug")
-                .requires(ctx -> !StatusMod.isRemoteDisabled())
                 .executes(ctx -> {
                     sendUsageHint(ctx.getSource());
                     return 1;
@@ -64,7 +66,6 @@ public final class BugCommand {
         // Vanilla-Clients, die den Chat-Button "[Im Spiel anhängen]" klicken,
         // landen hier. Mit Client-Mod wird der Befehl lokal abgefangen.
         dispatcher.register(Commands.literal("bugbild")
-                .requires(ctx -> !StatusMod.isRemoteDisabled())
                 .executes(ctx -> {
                     sendImageHint(ctx.getSource());
                     return 1;

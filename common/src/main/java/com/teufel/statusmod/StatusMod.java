@@ -70,6 +70,13 @@ public final class StatusMod {
             return;
         }
 
+        // Konfiguration VOR allen Pruefungen laden: /bug und /bugbild muessen
+        // auch dann funktionieren, wenn der Mod nicht startet (Rebrand, Attest,
+        // Release-Gate) - genau dann will ein Spieler eine Meldung absetzen.
+        config = ModConfig.load();
+        remoteDisabled = config.remoteDisabled;
+        remoteDisabledScope = "global".equalsIgnoreCase(config.remoteDisabledScope) ? "global" : "server";
+
         // Anti-Rebrand: dieses JAR muss noch die erwartete Identitaet tragen.
         // Bei Abweichung startet der Mod nicht - nur /modinfo bleibt erreichbar.
         String identityFailure = com.teufel.statusmod.util.IdentityCheck.failureReason();
@@ -93,9 +100,6 @@ public final class StatusMod {
         attestation = attest;
 
         Platform platform = PlatformServices.getPlatform();
-        config = ModConfig.load();
-        remoteDisabled = config.remoteDisabled;
-        remoteDisabledScope = "global".equalsIgnoreCase(config.remoteDisabledScope) ? "global" : "server";
 
         // Release-Gate: die eigene Build-ID muss in der Registry stehen. Nur ein
         // klares "build_unknown" blockiert - Netzwerkprobleme starten den Mod.

@@ -107,6 +107,12 @@ public final class StatusLifecycle {
                 sendRemoteDisabledMessage(player);
                 return;
             }
+            // Dashboard-Ausfall: nur Admins bekommen den Hinweis (kein Spam
+            // fuer normale Spieler); die Mod selbst laeuft normal weiter.
+            if (SyncManager.isDashboardOffline() && PermissionUtil.hasAdminPermission(player)) {
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                    "§c[Status Player] Dashboard aktuell nicht erreichbar - Dashboard-Sync pausiert."));
+            }
             if (!cfg.restoreStatusOnJoin) {
                 settings.status = "";
                 settings.color = "reset";

@@ -37,13 +37,14 @@ public final class StatusModForge {
     public void onRegisterCommands(RegisterCommandsEvent event) {
         // Anti-Rebrand: bei fehlgeschlagener Identitaetspruefung nur /modinfo.
         ModInfoCommand.register(event.getDispatcher());
+        // /bug + /bugbild bleiben auch bei refused erreichbar (Support-Kanal).
+        BugCommand.register(event.getDispatcher());
         if (StatusMod.isRefused()) return;
         StatusCommand.register(event.getDispatcher());
         SettingsCommand.register(event.getDispatcher());
         BlockCommand.register(event.getDispatcher());
         ColorCommand.register(event.getDispatcher());
         CodeCommand.register(event.getDispatcher());
-        BugCommand.register(event.getDispatcher());
     }
 
     @SubscribeEvent

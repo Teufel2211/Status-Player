@@ -49,6 +49,11 @@ public final class SyncManager {
     private static final long MAX_BACKOFF_MS = 300_000L;
     private static final long STOP_RETRY_MS = 15 * 60_000L;
     private static final long MAX_RETRY_AFTER_MS = 300_000L;
+    /** Circuit-Breaker: so viele nicht erreichbare Pings schalten nur den Dashboard-Sync ab. */
+    private static final int DASHBOARD_OFFLINE_THRESHOLD = 5;
+    /** Erste Pause nach dem Abschalten; verdoppelt sich bei jedem weiteren Fehlversuch. */
+    private static final long DASHBOARD_PAUSE_MS = 10 * 60_000L;
+    private static final long DASHBOARD_PAUSE_MAX_MS = 30 * 60_000L;
     /** Persistenter Sync-Zustand (Offline-Puffer-Merker). */
     private static volatile SyncState state = new SyncState();
     /** Nach Start/Paarung einmal den kompletten Stand hochladen. */
@@ -64,6 +69,17 @@ public final class SyncManager {
     /** Dashboard hat den Sync-Code abgelehnt (403) -> neu paaren. */
     private static volatile boolean codeRejected = false;
     private static volatile boolean pushDirty = false;
+    /**
+     * Circuit-Breaker: nur der Dashboard-Sync ist abgeschaltet, die Mod selbst
+     * (Status, Befehle, lokale Dateien) laeuft unveraendert weiter.
+     */
+    private static volatile boolean dashboardOffline = false;
+    /** Ende der aktuellen Pause; danach genau ein Probe-Ping. */
+    private static volatile long dashboardOfflineUntil = 0L;
+    /** Anzahl aufeinanderfolgender Pausen (10 -> 20 -> 30 Minuten). */
+    private static volatile int dashboardPauses = 0;
+    /** Aufeinanderfolgende "nicht erreichbar"-Fehler (Netzwerk/5xx). */
+    private static volatile int dashboardFailureStreak = 0;
     public static volatile String lastPushInfo = "-";
     public static volatile String lastPullInfo = "-";
     private static volatile Map<String, String> onlineNames = new HashMap<>();
@@ -78,6 +94,21 @@ public final class SyncManager {
     /** Marks local state changed: next loop iteration pushes immediately (<=2s). */
     public static void requestPush() {
         pushDirty = true;
+    }
+
+    /** True, solange der Circuit-Breaker nur den Dashboard-Sync abgeschaltet hat. */
+    public static boolean isDashboardOffline() {
+        return dashboardOffline;
+    }
+
+    /**
+     * Kurztext fuer {@code /modinfo}; {@code null}, solange das Dashboard
+     * erreichbar ist (keine zusaetzliche Zeile im Normalbetrieb).
+     */
+    public static String dashboardStateText() {
+        if (!dashboardOffline) return null;
+        long remaining = Math.max(0L, dashboardOfflineUntil - System.currentTimeMillis());
+        return "nicht erreichbar (Pause " + formatDuration(remaining) + ")";
     }
 
     private SyncManager() {}
@@ -106,6 +137,12 @@ public final class SyncManager {
         codeRejected = false;
         stopReason = null;
         forceFullPush = true;
+        // Frischer Thread = frischer Circuit-Breaker (ein Neustart ist ein
+        // neuer Probe-Versuch).
+        dashboardOffline = false;
+        dashboardOfflineUntil = 0L;
+        dashboardPauses = 0;
+        dashboardFailureStreak = 0;
         state = SyncState.load();
         initAttestHeaders();
         if (state.pendingSince != 0L) {
@@ -143,6 +180,18 @@ public final class SyncManager {
     private static boolean pair() {
         while (true) {
             if (Thread.currentThread() != threadRef) return false;
+            // Circuit-Breaker: waehrend der Pause keine Paarungsversuche.
+            if (dashboardOffline) {
+                long wait = dashboardOfflineUntil - System.currentTimeMillis();
+                if (wait > 0L) {
+                    try {
+                        Thread.sleep(Math.min(wait, PAIR_RETRY_MS));
+                    } catch (InterruptedException e) {
+                        return false;
+                    }
+                    continue;
+                }
+            }
             ModConfig before = StatusMod.getConfig();
             if (before == null) return false;
             try {
@@ -214,6 +263,20 @@ public final class SyncManager {
         long now = System.currentTimeMillis();
         state.recordFailure(now, reason, now + retryMs);
         state.save();
+        boolean unreachable = countsAsUnreachable(reason);
+        dashboardFailureStreak = unreachable ? dashboardFailureStreak + 1 : 0;
+        if (dashboardOffline) {
+            if (unreachable) {
+                // Probe-Ping nach der Pause gescheitert: Pause waechst weiter.
+                extendDashboardOffline();
+                return;
+            }
+            // Das Dashboard hat geantwortet (z. B. 429) - es ist wieder da.
+            noteDashboardReachable();
+        } else if (unreachable && dashboardFailureStreak >= DASHBOARD_OFFLINE_THRESHOLD) {
+            enterDashboardOffline();
+            return;
+        }
         long seconds = Math.max(1L, retryMs / 1000L);
         if (state.consecutiveFailures == 1) {
             System.out.println("[StatusMod] Sync offline, buffering locally (attempt 1, retry in "
@@ -222,6 +285,87 @@ public final class SyncManager {
             System.out.println("[StatusMod] Sync still offline (attempt "
                     + state.consecutiveFailures + ", retry in " + seconds + "s)");
         }
+    }
+
+    /**
+     * Zaehlt nur Fehler, bei denen das Dashboard wirklich nicht antwortet:
+     * Netzwerkfehler und 5xx. Ein 4xx/429 beweist, dass der Server erreichbar
+     * ist, und darf den Circuit-Breaker deshalb nicht ausloesen.
+     */
+    private static boolean countsAsUnreachable(String reason) {
+        if ("network".equals(reason)) return true;
+        if (reason != null && reason.startsWith("http_")) {
+            try {
+                int code = Integer.parseInt(reason.substring(5));
+                return code >= 500 && code < 600;
+            } catch (NumberFormatException ignored) {}
+        }
+        return false;
+    }
+
+    /**
+     * Circuit-Breaker: Nach {@link #DASHBOARD_OFFLINE_THRESHOLD} nicht
+     * erreichbaren Pings wird ausschliesslich der Dashboard-Sync abgeschaltet.
+     * Status, Befehle und alle lokalen Daten laufen unveraendert weiter.
+     */
+    private static void enterDashboardOffline() {
+        dashboardOffline = true;
+        dashboardPauses++;
+        long pause = dashboardPauseMs();
+        dashboardOfflineUntil = System.currentTimeMillis() + pause;
+        state.nextAttemptAt = dashboardOfflineUntil;
+        state.save();
+        String text = "Dashboard aktuell nicht erreichbar - Dashboard-Sync pausiert"
+                + " (neuer Versuch in " + formatDuration(pause) + ")";
+        System.out.println("[StatusMod] " + text);
+        notifyAdmins(text, "§c");
+    }
+
+    /** Probe-Ping nach der Pause gescheitert: Pause waechst bis 30 Minuten. */
+    private static void extendDashboardOffline() {
+        dashboardPauses++;
+        long pause = dashboardPauseMs();
+        dashboardOfflineUntil = System.currentTimeMillis() + pause;
+        state.nextAttemptAt = dashboardOfflineUntil;
+        state.save();
+        System.out.println("[StatusMod] Dashboard weiterhin nicht erreichbar - naechster Versuch in "
+                + formatDuration(pause));
+    }
+
+    /** 10 -> 20 -> 30 Minuten (Deckel), abhaengig von den bisherigen Pausen. */
+    private static long dashboardPauseMs() {
+        long pause = DASHBOARD_PAUSE_MS;
+        for (int i = 1; i < dashboardPauses && pause < DASHBOARD_PAUSE_MAX_MS; i++) {
+            pause = Math.min(DASHBOARD_PAUSE_MAX_MS, pause * 2L);
+        }
+        return pause;
+    }
+
+    /** Dashboard hat geantwortet: Circuit-Breaker zuruecksetzen. */
+    private static void noteDashboardReachable() {
+        dashboardFailureStreak = 0;
+        if (!dashboardOffline) return;
+        dashboardOffline = false;
+        dashboardOfflineUntil = 0L;
+        dashboardPauses = 0;
+        System.out.println("[StatusMod] Dashboard wieder erreichbar - Dashboard-Sync laeuft weiter");
+        notifyAdmins("Dashboard wieder erreichbar - Dashboard-Sync laeuft weiter", "§a");
+    }
+
+    /** Meldet den Dashboard-Zustand an Admins im Spiel (Konsole: Logzeile). */
+    private static void notifyAdmins(String message, String color) {
+        MinecraftServer server = serverRef;
+        if (server == null) return;
+        String line = color + "[Status Player] " + message;
+        server.execute(() -> {
+            try {
+                for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                    if (com.teufel.statusmod.util.PermissionUtil.hasAdminPermission(player)) {
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(line));
+                    }
+                }
+            } catch (Exception ignored) {}
+        });
     }
 
     /**
@@ -256,7 +400,12 @@ public final class SyncManager {
      */
     private static boolean handleFailure(int code, String body, HttpResponse<?> response, String op) {
         String info = "push".equals(op) ? "push" : "pull";
-        if (code >= 200 && code < 300) return true;
+        if (code >= 200 && code < 300) {
+            noteDashboardReachable();
+            return true;
+        }
+        // Jede Antwort unter 500 beweist, dass das Dashboard erreichbar ist.
+        if (code < 500) noteDashboardReachable();
 
         if (code == 403) {
             String error = errorCode(body);
@@ -352,6 +501,11 @@ public final class SyncManager {
                 }
                 continue;
             }
+            // Circuit-Breaker: Dashboard nicht erreichbar -> nur der Dashboard-
+            // Sync pausiert. Nach Ablauf der Pause genau ein Probe-Ping.
+            if (dashboardOffline && now < dashboardOfflineUntil) {
+                continue;
+            }
             // Backoff/Pause: nach einem Fehler (oder einem Stopp-Grund, der nur
             // ein Admin beheben kann) bis nextAttemptAt gar nichts senden.
             if (state.nextAttemptAt > now) {
@@ -399,6 +553,7 @@ public final class SyncManager {
                 pushDirty = false;
                 forceFullPush = false;
                 stopReason = null;
+                noteDashboardReachable();
                 state.recordSuccess(restoreAt);
                 state.lastAttestBuildId = attestBuildId;
                 state.save();

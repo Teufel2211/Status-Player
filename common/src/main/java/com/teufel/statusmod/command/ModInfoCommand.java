@@ -35,6 +35,10 @@ public class ModInfoCommand {
                             CommandUtil.sendSuccess(src, Component.literal("Build-Gate: "
                                 + StatusMod.buildGate.describe()), false);
                         }
+                        String dashboardState = com.teufel.statusmod.sync.SyncManager.dashboardStateText();
+                        if (dashboardState != null) {
+                            CommandUtil.sendSuccess(src, Component.literal("Dashboard: " + dashboardState), false);
+                        }
                         CommandUtil.sendSuccess(src, Component.literal("Website: " + WEBSITE), false);
                         CommandUtil.sendSuccess(src, Component.literal("Issues: " + ISSUES), false);
                     } catch (Exception e) {
